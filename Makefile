@@ -2,28 +2,31 @@
 
 C_ASSOC_ARRAY_DIR = cAssocArray
 C_ASSOC_ARRAY_URL = https://github.com/Andrew-M-C/cAssocArray.git
-PWD = `pwd`
+PWD = $(shell pwd)
 
-CFLAGS += -I$(C_ASSOC_ARRAY_DIR)/src
+CFLAGS += -I$(PWD)/include
 
 
 # main rules
 .PHONY: all
-all: $(C_ASSOC_ARRAY_DIR)
-	@echo "Nothing to be done for \"$@\""
+all: $(C_ASSOC_ARRAY_DIR) test.o
 
 
+###########################
+# clean
 .PHONY: clean
 clean:
-	@echo "Nothing to be done for \"$@\""
+	-@find ./ -name "*.o" | xargs rm -f
+	-@find ./ -name "*.d" | xargs rm -f
 
 
+###########################
 # distclean
 .PHONY: distclean
 distclean: clean
 	-rm -rf $(C_ASSOC_ARRAY_DIR)/
 
-
+###########################
 # cAssocArray
 .PHONY: $(C_ASSOC_ARRAY_DIR)
 $(C_ASSOC_ARRAY_DIR):
@@ -35,9 +38,11 @@ $(C_ASSOC_ARRAY_DIR):
 		git clone $(C_ASSOC_ARRAY_URL) $(PWD)/$(C_ASSOC_ARRAY_DIR); \
 	fi
 
-
+###########################
+# general rules
 # .o files
-$(C_OBJS): $(C_OBJS:.o=.c)
+#$(C_OBJS): $(C_OBJS:.o=.c)
+%.o: $(%@:.o=.c)
 	$(CC) -c $(CFLAGS) $*.c -o $*.o
 	@$(CC) -MM $(CFLAGS) $*.c > $*.d  
 	@mv -f $*.d $*.d.tmp  

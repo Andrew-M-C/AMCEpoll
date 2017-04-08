@@ -32,5 +32,8 @@
 *.dSYM/
 *.su
 
+# temp files
+*.d
+
 # cAssocArray
 cAssocArray/
