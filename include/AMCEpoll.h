@@ -2,14 +2,13 @@
 	Copyright (C) 2017 by Andrew Chang <laplacezhang@126.com>
 	Licensed under the LGPL v2.1, see the file COPYING in base directory.
 	
-	File name: 	test.c
+	File name: 	AMCEpoll.h
 	
 	Description: 	
-	    This is the test source for AMCEpoll. If you want to use AMCEpoll itself
-	only, please link .a or .so file.
+	    This file declares main interfaces of AMCEpoll tool.
 			
 	History:
-		2017-04-08: File created as "test.c"
+		2017-04-09: File created as "AMCEpoll.h"
 
 	------------------------------------------------------------------------
 
@@ -25,11 +24,13 @@
 		
 ********************************************************************************/
 
-#include <stdio.h>
+#ifndef __AMC_EPOLL_H__
+#define __AMC_EPOLL_H__
 
-int main(int argc, char* argv[])
-{
-	printf("hello, AMCEpoll!\n");
-	return 0;
-}
+#include <stdio.h>
+#include <unistd.h>
+
+
+#endif
+/* EOF */
 

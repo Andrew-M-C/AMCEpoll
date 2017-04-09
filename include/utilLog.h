@@ -2,14 +2,13 @@
 	Copyright (C) 2017 by Andrew Chang <laplacezhang@126.com>
 	Licensed under the LGPL v2.1, see the file COPYING in base directory.
 	
-	File name: 	test.c
+	File name: 	utilLog.h
 	
 	Description: 	
-	    This is the test source for AMCEpoll. If you want to use AMCEpoll itself
-	only, please link .a or .so file.
+	    This file declares log informations for AMCEpoll tool.
 			
 	History:
-		2017-04-08: File created as "test.c"
+		2017-04-08: File created as "utilLog.h"
 
 	------------------------------------------------------------------------
 
@@ -25,11 +24,33 @@
 		
 ********************************************************************************/
 
-#include <stdio.h>
+#ifndef __UTIL_LOG_H__
+#define __UTIL_LOG_H__
 
-int main(int argc, char* argv[])
-{
-	printf("hello, AMCEpoll!\n");
-	return 0;
-}
+#include <stdio.h>
+#include <unistd.h>
+
+enum {
+	LOG_EMERG = 0,
+	LOG_ALERT,
+	LOG_CRIT,
+	LOG_ERR,
+	LOG_WARNING,
+	LOG_NOTICE,
+	LOG_INFO,
+	LOG_DEBUG,
+};
+
+#define CFG_MAX_LOG_LEN			512
+
+/********/
+/* functions */
+void 
+	utilLogSetLevel(int level);
+ssize_t 
+	utilLog(int level, const char *format, ...);
+
+
+#endif
+/* EOF */
 
