@@ -27,8 +27,57 @@
 #ifndef __AMC_EPOLL_H__
 #define __AMC_EPOLL_H__
 
+/********/
+/* headers */
 #include <stdio.h>
 #include <unistd.h>
+#include <stdint.h>
+
+/********/
+/* data types */
+struct AMCEpoll;
+
+#ifndef NULL
+#define NULL	((void*)0)
+#endif
+
+#ifndef BOOL
+#ifndef _DO_NOT_DEFINE_BOOL
+#define BOOL	int
+#define FALSE	0
+#define TRUE	(!(FALSE))
+#endif
+#endif
+
+/* for uint16_t "events" */
+enum {
+	EP_MODE_PERSIST  = (1 << 0),	/* only used when adding events */
+	EP_MODE_EDGE     = (1 << 1),	/* only used when adding events */
+
+	EP_EVENT_READ    = (1 << 5),
+	EP_EVENT_WRITE   = (1 << 6),
+	EP_EVENT_ERROR   = (1 << 7),
+	EP_EVENT_FREE    = (1 << 8),
+	EP_EVENT_TIMEOUT = (1 << 9),
+};
+
+/* callback */
+typedef void (*ev_callback)(int fd, uint16_t events, void *arg);
+
+/********/
+/* functions */
+struct AMCEpoll 
+	AMCEpoll_New(size_t fdCount);
+int
+	AMCEpoll_Free(struct AMCEpoll *obj);
+int
+	AMCEpoll_AddEvent(struct AMCEpoll *obj, int fd, uint16_t events, int timeout, ev_callback callback, void *userData);
+int 
+	AMCEpoll_DelEvent(struct AMCEpoll *obj, int fd);
+int 
+	AMCEpoll_Dispatch(struct AMCEpoll *obj);
+int 
+	AMCEpoll_Exit(struct AMCEpoll *obj);
 
 
 #endif
