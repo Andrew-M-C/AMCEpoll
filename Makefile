@@ -14,11 +14,13 @@ LDFLAGS += -lpthread -lrt
 # main rules
 .PHONY: all
 all: $(C_ASSOC_ARRAY_DIR) libamcepoll.a libamcepoll.so test
+	@echo '<< make $@ done >>'
 
 ###########################
 # test process
 test: test.o
 	$(CC) test.o -o $@ $(LDFLAGS) -lamcepoll -L./ -static
+	@echo '<< make $@ done >>'
 
 
 ###########################
@@ -30,6 +32,7 @@ clean:
 	-rm -f *.a
 	-rm -f *.so
 	-rm -f test
+	@echo '<< make $@ done >>'
 
 
 ###########################
@@ -37,13 +40,14 @@ clean:
 .PHONY: distclean
 distclean: clean
 	-rm -rf $(C_ASSOC_ARRAY_DIR)/
+	@echo '<< make $@ done >>'
 
 ###########################
 # cAssocArray
 .PHONY: $(C_ASSOC_ARRAY_DIR)
 $(C_ASSOC_ARRAY_DIR):
 	@if [ -d $(C_ASSOC_ARRAY_DIR)/.git ]; then \
-		echo ""; \
+		echo "cAssocArray ready"; \
 	else \
 		mkdir $(C_ASSOC_ARRAY_DIR); \
 		echo "Now cloning $(C_ASSOC_ARRAY_URL)"; \

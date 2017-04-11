@@ -66,8 +66,8 @@ typedef void (*ev_callback)(int fd, uint16_t events, void *arg);
 
 /********/
 /* functions */
-struct AMCEpoll 
-	AMCEpoll_New(size_t fdCount);
+struct AMCEpoll *
+	AMCEpoll_New(size_t buffSize);
 int
 	AMCEpoll_Free(struct AMCEpoll *obj);
 int
@@ -77,7 +77,7 @@ int
 int 
 	AMCEpoll_Dispatch(struct AMCEpoll *obj);
 int 
-	AMCEpoll_Exit(struct AMCEpoll *obj);
+	AMCEpoll_LoopExit(struct AMCEpoll *obj);
 
 
 #endif

@@ -60,15 +60,17 @@ static int g_log_level = CFG_LOG_LEVEL;
 #define __PUBLIC_FUNCTIONS
 #ifdef __PUBLIC_FUNCTIONS
 
+/* --------------------utilLogSetLevel----------------------- */
 void utilLogSetLevel(int level)
 {
-	if (level >= LOG_EMERG && level <= LOG_DEBUG) {
+	if (level >= LOG_LV_EMERG && level <= LOG_LV_DEBUG) {
 		g_log_level = CFG_LOG_LEVEL;
 	}
 	return;
 }
 
 
+/* --------------------utilLog----------------------- */
 ssize_t utilLog(int level, const char *format, ...)
 {
 	if (level < 0 || level > 7) {

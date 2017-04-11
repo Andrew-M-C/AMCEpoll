@@ -32,6 +32,12 @@
 #include "AMCEpoll.h"
 #include "cAssocArray.h"
 
+#include <sys/epoll.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+
 #endif
 
 
@@ -39,26 +45,404 @@
 #define __DATA_DEFINITIONS
 #ifdef __DATA_DEFINITIONS
 
-struct epoll_event {
+#define MAX_FD_STR_LEN		(16)
+#define EP_EVENT_ALL_MASK	(\
+	EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_READ | \
+	EP_EVENT_WRITE | EP_EVENT_ERROR | EP_EVENT_FREE | \
+	EP_EVENT_TIMEOUT\
+	)
+typedef struct epoll_event epoll_event_st;
+
+struct amc_event {
 	int            fd;
 	ev_callback    callback;
 	void          *user_data;
 	uint16_t       events;
 };
 
+
 struct AMCEpoll {
-	int            epoll_fd;
-	cAssocArray   *all_events;
+	int             epoll_fd;
+	cAssocArray    *all_events;
+	size_t          epoll_buff_size;
+	epoll_event_st *epoll_buff[0];
 };
 
+#define _RETURN_ERRNO()	\
+	do{\
+		int err = errno;\
+		if ((err) > 0) {\
+			return (0 - (err));\
+		} else {\
+			return -1;\
+		}\
+	}while(0)
+
+#define _RETURN_ERR(err)	\
+	do{\
+		errno = err;\
+		return (0 - err);\
+	}while(0)
 
 
 #endif
 
 /********/
+#define __EPOLL_OPERATIONS
+#ifdef __EPOLL_OPERATIONS
+
+/* --------------------_epoll_code_from_amc_code----------------------- */
+static int _epoll_code_from_amc_code(uint16_t amcEv)
+{
+	int ret = 0;
+	if (0 == (amcEv & EP_MODE_PERSIST)) {
+		ret |= EPOLLONESHOT;
+	}
+	if (amcEv & EP_MODE_EDGE) {
+		ret |= EPOLLET;
+	}
+	if (amcEv & EP_EVENT_READ) {
+		ret |= EPOLLIN | EPOLLPRI;
+	}
+	if (amcEv & EP_EVENT_WRITE) {
+		ret |= EPOLLOUT;
+	}
+	if (amcEv & EP_EVENT_ERROR) {
+		ret |= EPOLLERR | EPOLLHUP;
+	}
+#if 0
+	if (amcEv & EP_EVENT_FREE) {
+		/* nothing */
+	}
+	if (amcEv & EP_EVENT_TIMEOUT) {
+		/* nothing */
+	}
+#endif
+	return ret;
+}
+
+
+/* --------------------_epoll_add----------------------- */
+static int _epoll_add(struct AMCEpoll *base, struct amc_event *amcEvent)
+{
+	int callStat = 0;
+	struct epoll_event epollEvent;
+	
+	epollEvent.events = _epoll_code_from_amc_code(amcEvent->events);
+	epollEvent.data.ptr = amcEvent;
+
+	callStat = epoll_ctl(base->epoll_fd, EPOLL_CTL_ADD, amcEvent->fd, &epollEvent);
+	if (0 == callStat) {
+		return 0;
+	} else {
+		_RETURN_ERRNO();
+	}
+}
+
+
+/* --------------------_epoll_del----------------------- */
+static int _epoll_del(struct AMCEpoll *base, struct amc_event *amcEvent)
+{
+	int callStat = epoll_ctl(base->epoll_fd, EPOLL_CTL_DEL, amcEvent->fd, NULL);
+	if (0 == callStat) {
+		return 0;
+	} else {
+		_RETURN_ERRNO();
+	}
+}
+
+
+/* --------------------_epoll_mod----------------------- */
+static int _epoll_mod(struct AMCEpoll *base, struct amc_event *amcEvent)
+{
+	int callStat = 0;
+	struct epoll_event epollEvent;
+
+	epollEvent.events = _epoll_code_from_amc_code(amcEvent->events);
+	epollEvent.data.ptr = amcEvent;
+
+	callStat = epoll_ctl(base->epoll_fd, EPOLL_CTL_MOD, amcEvent->fd, &epollEvent);
+	if (0 == callStat) {
+		return 0;
+	} else {
+		_RETURN_ERRNO();
+	}
+}
+
+
+#endif
+
+
+/********/
+#define __CALLBACK_INVOKES
+#ifdef __CALLBACK_INVOKES
+
+/* --------------------_invoke_callback_free----------------------- */
+static void _invoke_callback_free(struct amc_event *evObj, uint16_t evType)
+{
+	(evObj->callback)(evObj->fd, evType, evObj->user_data);
+	return;
+}
+
+#endif
+
+
+/********/
+#define __FD_OBJECT_OPERATIONS
+#ifdef __FD_OBJECT_OPERATIONS
+
+/* --------------------_free_event_for_fd----------------------- */
+static int _free_event_for_fd(struct AMCEpoll *base, int fd)
+{
+	struct amc_event *event = NULL;
+	char fdStr[MAX_FD_STR_LEN];
+	snprintf(fdStr, sizeof(fdStr), "%d", fd);
+	int callStat;
+	int epollErr = 0;
+
+	event = (struct amc_event *)cAssocArray_GetValue(base->all_events, fdStr);
+	if (NULL == event) {
+		_RETURN_ERR(ENOENT);
+	}
+
+	epollErr = _epoll_del(base, event);
+	
+	if (event->events & EP_EVENT_FREE) {
+		_invoke_callback_free(event, EP_EVENT_FREE);
+	}
+
+	callStat = cAssocArray_RemoveValue(base->all_events, fdStr, TRUE);
+	if (epollErr) {
+		_RETURN_ERR(epollErr);
+	} else if (callStat < 0) {
+		_RETURN_ERRNO();
+	} else {
+		return 0;
+	}
+}
+
+
+/* --------------------_new_event----------------------- */
+static struct amc_event *_new_event(int fd, ev_callback callback, void *userData, uint16_t events)
+{
+	struct amc_event *ret = malloc(sizeof(*ret));
+	if (ret) {
+		ret->fd = fd;
+		ret->callback = callback;
+		ret->user_data = userData;
+		ret->events = events & EP_EVENT_ALL_MASK;
+	}
+	return ret;
+}
+
+
+/* --------------------_new_event----------------------- */
+static int _add_event(struct AMCEpoll *base, struct amc_event *event)
+{
+	int callStat = 0;
+	char fdStr[MAX_FD_STR_LEN];
+	snprintf(fdStr, sizeof(fdStr), "%d", event->fd);
+
+	callStat = cAssocArray_AddValue(base->all_events, fdStr, event);
+	if (callStat < 0) {
+		_RETURN_ERRNO();
+	}
+
+	callStat = _epoll_add(base, event);
+	if (0 == callStat) {
+		return 0;
+	}
+	else {
+		int err = errno;
+		cAssocArray_RemoveValue(base->all_events, fdStr, FALSE);
+		_RETURN_ERR(err);
+	}
+}
+
+
+/* --------------------_mod_event----------------------- */
+static int _mod_event(struct AMCEpoll *base, struct amc_event *evObj, ev_callback callback, void *userData, uint16_t events)
+{
+	evObj->callback = callback;
+	evObj->user_data = userData;
+
+	if (evObj->events != (events & EP_EVENT_ALL_MASK))
+	{
+		evObj->events = events & EP_EVENT_ALL_MASK;
+		if (0 == _epoll_mod(base, evObj)) {
+			return 0;
+		} else {
+			_RETURN_ERRNO();
+		}
+	}
+	else {
+		return 0;
+	}
+}
+
+
+/* --------------------_release_res_of_fd----------------------- */
+static struct amc_event *_get_event_for_fd(struct AMCEpoll *base, int fd)
+{
+	struct amc_event *ret = NULL;
+	char fdStr[MAX_FD_STR_LEN];
+
+	snprintf(fdStr, sizeof(fdStr), "%d", fd);
+	ret = (struct amc_event *)cAssocArray_GetValue(base->all_events, fdStr);
+	return ret;
+}
+
+
+#endif
+
+
+/********/
 #define __PUBLIC_FUNCTIONS
 #ifdef __PUBLIC_FUNCTIONS
 
+/* --------------------AMCEpoll_New----------------------- */
+struct AMCEpoll *AMCEpoll_New(size_t buffSize)
+{
+	if (buffSize <= 0) {
+		errno = EINVAL;
+		return NULL;
+	}
+	else {
+		struct AMCEpoll *ret;
+		size_t objLen = sizeof(*ret) + sizeof(epoll_event_st) * buffSize;
+		BOOL isOK = TRUE;
+
+		/* malloc */
+		ret = malloc(objLen);
+		if (NULL == ret) {
+			isOK = FALSE;
+		} else {
+			memset(ret, 0, objLen);
+		}
+
+		/* epoll_create */
+		if (isOK) {
+			ret->epoll_fd = epoll_create(buffSize);
+			if (ret->epoll_fd < 0) {
+				isOK = FALSE;
+			}
+		}
+
+		/* aAssocArray */
+		if (isOK) {
+			ret->all_events = cAssocArray_Create(FALSE);
+			if (NULL == ret->all_events) {
+				isOK = FALSE;
+			}
+		}
+
+		/* return */
+		if (FALSE == isOK) {
+			if (ret) {
+				AMCEpoll_Free(ret);
+				ret = NULL;
+			}
+		}
+		return ret;
+	}
+}
+
+
+/* --------------------AMCEpoll_Free----------------------- */
+int AMCEpoll_Free(struct AMCEpoll *obj)
+{
+	if (NULL == obj) {
+		_RETURN_ERR(EINVAL);
+	}
+	else
+	{
+		// TODO: free with cAssocArray callback
+		if (obj->all_events) {
+			cArrayKeys *allKeys = cAssocArray_GetKeys(obj->all_events);
+			cArrayKeys *eachKey = allKeys;
+			while (eachKey)
+			{
+				int fd = strtol(eachKey->key, NULL, 10);
+				_free_event_for_fd(obj, fd);
+				eachKey = eachKey->next;
+			}
+			cAssocArray_Delete(obj->all_events, TRUE);
+			obj->all_events = NULL;
+
+			if (allKeys) {
+				cArrayKeys_Free(allKeys);
+				allKeys = NULL;
+			}
+		}
+
+		if (obj->epoll_fd > 0) {
+			close(obj->epoll_fd);
+			obj->epoll_fd = -1;
+		}
+
+		free(obj);
+		obj = NULL;
+
+		return 0;
+	}
+}
+
+
+/* --------------------AMCEpoll_AddEvent----------------------- */
+int	AMCEpoll_AddEvent(struct AMCEpoll *obj, int fd, uint16_t events, int timeout, ev_callback callback, void *userData)
+{
+	if (NULL == obj) {
+		_RETURN_ERR(EINVAL);
+	}
+	else if (fd < 0) {
+		_RETURN_ERR(EINVAL);
+	}
+	else if (0 == (events & (EP_EVENT_READ | EP_EVENT_WRITE))) {
+		_RETURN_ERR(EINVAL);
+	}
+	else {
+		struct amc_event *anEvent = _get_event_for_fd(obj, fd);
+		if (NULL == anEvent) {
+			return _mod_event(obj, anEvent, callback, userData, events);
+		}
+		else {
+			anEvent = _new_event(fd, callback, userData, events);
+			if (NULL == anEvent) {
+				_RETURN_ERRNO();
+			}
+			else {
+				int ret = _add_event(obj, anEvent);
+				if (0 == ret) {
+					return 0;
+				}
+				else {
+					int errCpy = errno;
+					free(anEvent);
+					anEvent = NULL;
+					_RETURN_ERR(errCpy);
+				}
+			}
+			// end of "else (NULL == anEvent) {..."
+		}
+		// end of: "else (NULL == anEvent) {..."
+	}
+	// end of: "else (NULL == obj) {..."
+}
+
+
+/* --------------------AMCEpoll_DelEvent----------------------- */
+int AMCEpoll_DelEvent(struct AMCEpoll *obj, int fd)
+{
+	if (NULL == obj) {
+		_RETURN_ERR(EINVAL);
+	}
+	else if (fd < 0) {
+		_RETURN_ERR(EINVAL);
+	}
+	else {
+		return _free_event_for_fd(obj, fd);
+	}
+}
 
 
 
