@@ -36,6 +36,7 @@
 /********/
 /* data types */
 struct AMCEpoll;
+struct AMCEpollEvent;
 
 #ifndef NULL
 #define NULL	((void*)0)
@@ -70,10 +71,12 @@ struct AMCEpoll *
 	AMCEpoll_New(size_t buffSize);
 int
 	AMCEpoll_Free(struct AMCEpoll *obj);
-int
-	AMCEpoll_AddEvent(struct AMCEpoll *obj, int fd, uint16_t events, int timeout, ev_callback callback, void *userData);
 int 
-	AMCEpoll_DelEvent(struct AMCEpoll *obj, int fd);
+	AMCEpoll_AddEvent(struct AMCEpoll *obj, int fd, uint16_t events, int timeout, ev_callback callback, void *userData, struct AMCEpollEvent **eventOut);
+int 
+	AMCEpoll_DelEvent(struct AMCEpoll *obj, struct AMCEpollEvent *event);
+int 
+	AMCEpoll_DelEventByFd(struct AMCEpoll *obj, int fd);
 int 
 	AMCEpoll_Dispatch(struct AMCEpoll *obj);
 int 

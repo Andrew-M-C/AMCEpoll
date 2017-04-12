@@ -60,7 +60,7 @@ enum {
 	)
 typedef struct epoll_event epoll_event_st;
 
-struct amc_event {
+struct AMCEpollEvent {
 	int            fd;
 	ev_callback    callback;
 	void          *user_data;
@@ -73,7 +73,7 @@ struct AMCEpoll {
 	uint32_t        base_status;
 	cAssocArray    *all_events;
 	size_t          epoll_buff_size;
-	epoll_event_st *epoll_buff[0];
+	epoll_event_st  epoll_buff[0];
 };
 
 #define _RETURN_ERRNO()	\
@@ -88,8 +88,15 @@ struct AMCEpoll {
 
 #define _RETURN_ERR(err)	\
 	do{\
-		errno = err;\
-		return (0 - err);\
+		if (err > 0) {\
+			errno = err;\
+			return (0 - err);\
+		} else if (err < 0) {\
+			errno = 0 - err;\
+			return err;\
+		} else {\
+			return -1;\
+		}\
 	}while(0)
 
 
@@ -131,7 +138,7 @@ static int _epoll_code_from_amc_code(uint16_t amcEv)
 
 
 /* --------------------_epoll_add----------------------- */
-static int _epoll_add(struct AMCEpoll *base, struct amc_event *amcEvent)
+static int _epoll_add(struct AMCEpoll *base, struct AMCEpollEvent *amcEvent)
 {
 	int callStat = 0;
 	struct epoll_event epollEvent;
@@ -151,7 +158,7 @@ static int _epoll_add(struct AMCEpoll *base, struct amc_event *amcEvent)
 
 
 /* --------------------_epoll_del----------------------- */
-static int _epoll_del(struct AMCEpoll *base, struct amc_event *amcEvent)
+static int _epoll_del(struct AMCEpoll *base, struct AMCEpollEvent *amcEvent)
 {
 	int callStat = epoll_ctl(base->epoll_fd, EPOLL_CTL_DEL, amcEvent->fd, NULL);
 	if (0 == callStat) {
@@ -165,7 +172,7 @@ static int _epoll_del(struct AMCEpoll *base, struct amc_event *amcEvent)
 
 
 /* --------------------_epoll_mod----------------------- */
-static int _epoll_mod(struct AMCEpoll *base, struct amc_event *amcEvent)
+static int _epoll_mod(struct AMCEpoll *base, struct AMCEpollEvent *amcEvent)
 {
 	int callStat = 0;
 	struct epoll_event epollEvent;
@@ -198,7 +205,7 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 	int evFd = base->epoll_fd;
 	int evSize = base->epoll_buff_size;
 	int nTotal = 0;
-	int nIndex = 0;
+//	int nIndex = 0;
 	int errCpy = 0;
 	BOOL shouldExit = FALSE;
 
@@ -215,7 +222,7 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 		}
 		else if (0 == nTotal) {
 			// TODO: Add support
-			DEBUG("Peace...");
+			DEBUG("Enjoy your peace...");
 		}
 		else {
 			// TODO: Job till here
@@ -244,7 +251,7 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 #ifdef __CALLBACK_INVOKES
 
 /* --------------------_invoke_callback----------------------- */
-static void _invoke_callback(struct amc_event *evObj, uint16_t evType)
+static void _invoke_callback(struct AMCEpollEvent *evObj, uint16_t evType)
 {
 	(evObj->callback)(evObj->fd, evType, evObj->user_data);
 	return;
@@ -255,19 +262,34 @@ static void _invoke_callback(struct amc_event *evObj, uint16_t evType)
 
 
 /********/
-#define __FD_OBJECT_OPERATIONS
-#ifdef __FD_OBJECT_OPERATIONS
+#define __EVENT_OPERATIONS
+#ifdef __EVENT_OPERATIONS
+
+/* --------------------_get_event_for_fd----------------------- */
+static struct AMCEpollEvent *_get_event_for_fd(struct AMCEpoll *base, int fd)
+{
+	struct AMCEpollEvent *ret = NULL;
+	char fdStr[MAX_FD_STR_LEN];
+
+	snprintf(fdStr, sizeof(fdStr), "%d", fd);
+	ret = (struct AMCEpollEvent *)cAssocArray_GetValue(base->all_events, fdStr);
+	if (NULL == ret) {
+		NOTICE("Fd %d was not added before.", fd);
+	}
+	return ret;
+}
+
 
 /* --------------------_free_event_for_fd----------------------- */
 static int _free_event_for_fd(struct AMCEpoll *base, int fd)
 {
-	struct amc_event *event = NULL;
+	struct AMCEpollEvent *event = NULL;
 	char fdStr[MAX_FD_STR_LEN];
 	snprintf(fdStr, sizeof(fdStr), "%d", fd);
 	int callStat;
 	int epollErr = 0;
 
-	event = (struct amc_event *)cAssocArray_GetValue(base->all_events, fdStr);
+	event = (struct AMCEpollEvent *)cAssocArray_GetValue(base->all_events, fdStr);
 	if (NULL == event) {
 		NOTICE("Fd %d was not added before.", fd);
 		_RETURN_ERR(ENOENT);
@@ -292,10 +314,24 @@ static int _free_event_for_fd(struct AMCEpoll *base, int fd)
 }
 
 
-/* --------------------_new_event----------------------- */
-static struct amc_event *_new_event(int fd, ev_callback callback, void *userData, uint16_t events)
+/* --------------------_free_event----------------------- */
+static int _free_event(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
-	struct amc_event *ret = malloc(sizeof(*ret));
+	struct AMCEpollEvent *eventDummy = _get_event_for_fd(base, event->fd);
+
+	if (eventDummy != event) {
+		NOTICE("Cannot find event %p", event);
+		_RETURN_ERR(ENOENT);
+	}
+
+	return _free_event_for_fd(base, event->fd);
+}
+
+
+/* --------------------_new_event----------------------- */
+static struct AMCEpollEvent *_new_event(int fd, ev_callback callback, void *userData, uint16_t events)
+{
+	struct AMCEpollEvent *ret = malloc(sizeof(*ret));
 	if (ret) {
 		ret->fd = fd;
 		ret->callback = callback;
@@ -310,7 +346,7 @@ static struct amc_event *_new_event(int fd, ev_callback callback, void *userData
 
 
 /* --------------------_new_event----------------------- */
-static int _add_event(struct AMCEpoll *base, struct amc_event *event)
+static int _add_event(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
 	int callStat = 0;
 	char fdStr[MAX_FD_STR_LEN];
@@ -336,7 +372,7 @@ static int _add_event(struct AMCEpoll *base, struct amc_event *event)
 
 
 /* --------------------_mod_event----------------------- */
-static int _mod_event(struct AMCEpoll *base, struct amc_event *evObj, ev_callback callback, void *userData, uint16_t events)
+static int _mod_event(struct AMCEpoll *base, struct AMCEpollEvent *evObj, ev_callback callback, void *userData, uint16_t events)
 {
 	evObj->callback = callback;
 	evObj->user_data = userData;
@@ -349,21 +385,6 @@ static int _mod_event(struct AMCEpoll *base, struct amc_event *evObj, ev_callbac
 	else {
 		return 0;
 	}
-}
-
-
-/* --------------------_release_res_of_fd----------------------- */
-static struct amc_event *_get_event_for_fd(struct AMCEpoll *base, int fd)
-{
-	struct amc_event *ret = NULL;
-	char fdStr[MAX_FD_STR_LEN];
-
-	snprintf(fdStr, sizeof(fdStr), "%d", fd);
-	ret = (struct amc_event *)cAssocArray_GetValue(base->all_events, fdStr);
-	if (NULL == ret) {
-		NOTICE("Fd %d was not added before.", fd);
-	}
-	return ret;
 }
 
 
@@ -466,52 +487,98 @@ int AMCEpoll_Free(struct AMCEpoll *obj)
 
 
 /* --------------------AMCEpoll_AddEvent----------------------- */
-int	AMCEpoll_AddEvent(struct AMCEpoll *obj, int fd, uint16_t events, int timeout, ev_callback callback, void *userData)
+int	AMCEpoll_AddEvent(struct AMCEpoll *obj, int fd, uint16_t events, int timeout, ev_callback callback, void *userData, struct AMCEpollEvent **eventOut)
+{
+	int ret = 0;
+	struct AMCEpollEvent *anEvent = NULL;
+
+	if (NULL == obj) {
+		ERROR("Nil parameter");
+		ret = EINVAL;
+		goto ERR_END;
+	}
+	else if (fd < 0) {
+		ERROR("Negative file descriptor");
+		ret = EINVAL;
+		goto ERR_END;
+	}
+	else if (0 == (events & (EP_EVENT_READ | EP_EVENT_WRITE))) {
+		ERROR("Invalid event types: 0x%x", events);
+		ret = EINVAL;
+		goto ERR_END;
+	}
+
+	/* para check OK */
+	anEvent = _get_event_for_fd(obj, fd);
+	if (NULL == anEvent)
+	{
+		/* This is an new event */
+		ret = _mod_event(obj, anEvent, callback, userData, events);
+		if (ret < 0) {
+			goto ERR_END;
+		}
+		else {
+			if (eventOut) {
+				*eventOut = anEvent;
+			}
+			return 0;
+		}
+	}
+	else
+	{
+		/* This is an existed event */
+		anEvent = _new_event(fd, callback, userData, events);
+		if (NULL == anEvent) {
+			ret = errno;
+			goto ERR_END;
+		}
+		else {
+			int ret = _add_event(obj, anEvent);
+			if (0 == ret) {
+				if (eventOut) {
+					*eventOut = anEvent;
+				}
+				return 0;
+			}
+			else {
+				ret = errno;
+				free(anEvent);
+				anEvent = NULL;
+				goto ERR_END;
+			}
+		}
+		// end of "else (NULL == anEvent) {..."
+	}
+	// end of: "else (NULL == anEvent) {..."
+
+
+ERR_END:
+	if (eventOut) {
+		*eventOut = NULL;
+	}
+	_RETURN_ERR(ret);
+}
+
+
+/* --------------------AMCEpoll_DelEvent----------------------- */
+int AMCEpoll_DelEvent(struct AMCEpoll *obj, struct AMCEpollEvent *event)
 {
 	if (NULL == obj) {
 		ERROR("Nil parameter");
 		_RETURN_ERR(EINVAL);
 	}
-	else if (fd < 0) {
-		ERROR("Negative file descriptor");
-		_RETURN_ERR(EINVAL);
-	}
-	else if (0 == (events & (EP_EVENT_READ | EP_EVENT_WRITE))) {
-		ERROR("Invalid event types: 0x%x", events);
+	else if (NULL == event) {
+		ERROR("Nil parameter");
 		_RETURN_ERR(EINVAL);
 	}
 	else {
-		struct amc_event *anEvent = _get_event_for_fd(obj, fd);
-		if (NULL == anEvent) {
-			return _mod_event(obj, anEvent, callback, userData, events);
-		}
-		else {
-			anEvent = _new_event(fd, callback, userData, events);
-			if (NULL == anEvent) {
-				_RETURN_ERRNO();
-			}
-			else {
-				int ret = _add_event(obj, anEvent);
-				if (0 == ret) {
-					return 0;
-				}
-				else {
-					int errCpy = errno;
-					free(anEvent);
-					anEvent = NULL;
-					_RETURN_ERR(errCpy);
-				}
-			}
-			// end of "else (NULL == anEvent) {..."
-		}
-		// end of: "else (NULL == anEvent) {..."
+		return _free_event(obj, event);
 	}
-	// end of: "else (NULL == obj) {..."
 }
 
 
-/* --------------------AMCEpoll_DelEvent----------------------- */
-int AMCEpoll_DelEvent(struct AMCEpoll *obj, int fd)
+/* --------------------AMCEpoll_DelEventByFd----------------------- */
+int AMCEpoll_DelEventByFd(struct AMCEpoll *obj, int fd)
 {
 	if (NULL == obj) {
 		ERROR("Nil parameter");
