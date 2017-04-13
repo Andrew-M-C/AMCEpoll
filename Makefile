@@ -18,8 +18,12 @@ all: $(C_ASSOC_ARRAY_DIR) libamcepoll.a libamcepoll.so test
 
 ###########################
 # test process
-test: test.o
-	$(CC) test.o -o $@ $(LDFLAGS) -lamcepoll -L./ -static
+.PHONY: test
+test: test_server
+	@echo '<< make $@ done >>'
+
+test_server: test_server.o
+	$(CC) test_server.o -o $@ $(LDFLAGS) -lamcepoll -L./ -static
 	@echo '<< make $@ done >>'
 
 
@@ -31,7 +35,7 @@ clean:
 	-find ./ -name "*.d" | xargs rm -f
 	-rm -f *.a
 	-rm -f *.so
-	-rm -f test
+	-rm -f test_server
 	@echo '<< make $@ done >>'
 
 
@@ -47,11 +51,12 @@ distclean: clean
 .PHONY: $(C_ASSOC_ARRAY_DIR)
 $(C_ASSOC_ARRAY_DIR):
 	@if [ -d $(C_ASSOC_ARRAY_DIR)/.git ]; then \
-		echo "cAssocArray ready"; \
+		echo '<< make $@ done >>'; \
 	else \
 		mkdir $(C_ASSOC_ARRAY_DIR); \
 		echo "Now cloning $(C_ASSOC_ARRAY_URL)"; \
 		git clone $(C_ASSOC_ARRAY_URL) $(PWD)/$(C_ASSOC_ARRAY_DIR); \
+		echo '<< make $@ done >>'; \
 	fi
 
 ###########################
@@ -60,15 +65,17 @@ AMC_EPOLL_OBJS = $(shell find ./src -name "*.c" | sed 's/\.c/\.o/')
 
 libamcepoll.so: $(AMC_EPOLL_OBJS)
 	$(CC) $(AMC_EPOLL_OBJS) -o $@ $(LDFLAGS) -shared
+	@echo '<< make $@ done >>'
 
 libamcepoll.a: $(AMC_EPOLL_OBJS)
 	$(AR) r $@ $(AMC_EPOLL_OBJS)
+	@echo '<< make $@ done >>'
 
 ###########################
 # general rules
 # .o files
-
-ALL_C_OBJ = $(AMC_EPOLL_OBJS) ./test.o
+PWD_C_FILES = ./$(wildcard *.c)
+ALL_C_OBJ = $(AMC_EPOLL_OBJS) $(PWD_C_FILES:.c=.o)
 -include $(ALL_C_OBJ:.o=.d)
 
 $(ALL_C_OBJ): $(ALL_C_OBJ:.o=.c)
@@ -81,6 +88,8 @@ $(ALL_C_OBJ): $(ALL_C_OBJ:.o=.c)
 
 .PHONY: debug
 debug:
-	@echo "$(ALL_C_OBJ)"
+	@echo '$(PWD_C_FILES)'
+	@echo '$(ALL_C_OBJ)'
+	@echo '$(AMC_EPOLL_OBJS)'
 
 

@@ -39,4 +39,5 @@
 cAssocArray/
 
 # test executable file
-test
+test_server
+test_client
