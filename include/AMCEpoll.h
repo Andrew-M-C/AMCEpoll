@@ -55,14 +55,14 @@ struct AMCEpollEvent;
 
 /* for uint16_t "events" */
 enum {
-	EP_MODE_PERSIST  = (1 << 0),	/* only used when adding events */
-	EP_MODE_EDGE     = (1 << 1),	/* only used when adding events */
+	EP_EVENT_READ    = (1 << 0),
+	EP_EVENT_WRITE   = (1 << 1),
+	EP_EVENT_ERROR   = (1 << 2),
+	EP_EVENT_FREE    = (1 << 3),
+	EP_EVENT_TIMEOUT = (1 << 4),
 
-	EP_EVENT_READ    = (1 << 5),
-	EP_EVENT_WRITE   = (1 << 6),
-	EP_EVENT_ERROR   = (1 << 7),
-	EP_EVENT_FREE    = (1 << 8),
-	EP_EVENT_TIMEOUT = (1 << 9),
+	EP_MODE_PERSIST  = (1 << 8),	/* only used when adding events */
+	EP_MODE_EDGE     = (1 << 9),	/* only used when adding events */
 };
 
 /* callback */
@@ -90,6 +90,8 @@ int
 	AMCFd_MakeNonBlock(int fd);
 int 
 	AMCFd_MakeCloseOnExec(int fd);
+ssize_t 
+	AMCFd_Read(int fd, void *buff, size_t nbyte);
 
 
 #endif

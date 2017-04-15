@@ -39,6 +39,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <stdint.h>
 
 #endif
 
@@ -197,68 +198,53 @@ static int _epoll_mod(struct AMCEpoll *base, struct AMCEpollEvent *amcEvent)
 
 
 /********/
-#define __AMC_EPOLL_MAIN_LOOP
-#ifdef __AMC_EPOLL_MAIN_LOOP
-
-/* --------------------_dispatch_main_loop----------------------- */
-static int _dispatch_main_loop(struct AMCEpoll *base)
-{
-	struct epoll_event *evBuff = base->epoll_buff;
-	int evFd = base->epoll_fd;
-	int evSize = base->epoll_buff_size;
-	int nTotal = 0;
-//	int nIndex = 0;
-	int errCpy = 0;
-	BOOL shouldExit = FALSE;
-
-	base->base_status = 0;
-
-	/* This is actually a thread-like process */
-	do {
-		nTotal = epoll_wait(evFd, evBuff, evSize, 1000);		// TODO: implement timeout
-		if (nTotal < 0) {
-			errCpy = errno;
-			ERROR("Failed in epoll_wait(): %s", strerror(errCpy));
-			base->base_status |= EP_STAT_EPOLL_ERROR;
-			shouldExit = TRUE;
-		}
-		else if (0 == nTotal) {
-			// TODO: Add support
-			DEBUG("Enjoy your peace...");
-		}
-		else {
-			// TODO: Job till here
-			// ......
-		}
-	} while (FALSE == shouldExit);
-
-	/* clean status */
-	base->base_status &= ~EP_STAT_SHOULD_EXIT;
-
-	/* return */
-	if (base->base_status & EP_STAT_EPOLL_ERROR) {
-		_RETURN_ERR(errCpy);
-	}
-	else {
-		return 0;
-	}
-}
-
-
-#endif
-
-
-/********/
 #define __CALLBACK_INVOKES
 #ifdef __CALLBACK_INVOKES
 
 /* --------------------_invoke_callback----------------------- */
-static void _invoke_callback(struct AMCEpollEvent *evObj, uint16_t evType)
+static inline void _invoke_callback(struct AMCEpollEvent *evObj, uint16_t evType)
 {
 	(evObj->callback)(evObj->fd, evType, evObj->user_data);
 	return;
 }
 
+
+/* --------------------_invoke_callback_if_necessary----------------------- */
+static void _invoke_callback_if_necessary(struct AMCEpollEvent *evObj, const int epoll_events)
+{
+	uint16_t amcEvents = 0;
+
+	if (epoll_events & EPOLLERR) {
+		DEBUG("Fd %d got error: EPOLLERR (0x%x)", evObj->fd, EPOLLERR);
+		amcEvents |= EP_EVENT_ERROR;
+	}
+	if (epoll_events & EPOLLHUP) {
+		DEBUG("Fd %d got error: EPOLLHUP (0x%x)", evObj->fd, EPOLLHUP);
+		amcEvents |= EP_EVENT_ERROR;
+	}
+	if ((epoll_events & EPOLLIN) || (epoll_events & EPOLLPRI)) {
+		DEBUG("Fd %d can read", evObj->fd);
+		amcEvents |= EP_EVENT_READ;
+	}
+	if (epoll_events & EPOLLOUT) {
+		DEBUG("Fd %d can write", evObj->fd);
+		amcEvents |= EP_EVENT_WRITE;
+	}
+
+	if (0 == amcEvents) {
+		DEBUG("Fd %d got no events", evObj->fd);
+		// nothing to do
+	}
+	else if (amcEvents != (evObj->events & ~amcEvents)) {
+		DEBUG("Invoke event 0x%p", evObj);
+		_invoke_callback(evObj, amcEvents);
+	}
+	else {
+		// event not observed
+	}
+
+	return;
+}
 
 #endif
 
@@ -288,12 +274,14 @@ static int _free_event_for_fd(struct AMCEpoll *base, int fd)
 	int callStat;
 	int epollErr = 0;
 
-	event = (struct AMCEpollEvent *)cAssocArray_GetValue(base->all_events, fdStr);
+	event = cAssocArray_GetValue(base->all_events, fdStr);
 	if (NULL == event) {
 		NOTICE("Fd %d was not added before.", fd);
 		_RETURN_ERR(ENOENT);
 	}
 
+	DEBUG("Now delete %s in 0x%p", fdStr, event);
+	cAssocArray_DumpToStdout(base->all_events);
 	epollErr = _epoll_del(base, event);
 	
 	if (event->events & EP_EVENT_FREE) {
@@ -301,6 +289,7 @@ static int _free_event_for_fd(struct AMCEpoll *base, int fd)
 	}
 
 	callStat = cAssocArray_RemoveValue(base->all_events, fdStr, TRUE);
+	cAssocArray_DumpToStdout(base->all_events);
 	if (epollErr) {
 		_RETURN_ERR(epollErr);
 	} else if (callStat < 0) {
@@ -350,7 +339,7 @@ static int _add_event(struct AMCEpoll *base, struct AMCEpollEvent *event)
 	int callStat = 0;
 	char fdStr[MAX_FD_STR_LEN];
 	snprintf(fdStr, sizeof(fdStr), "%d", event->fd);
-	DEBUG("Add New event %s", fdStr);
+	DEBUG("Add New event %s 0x%p", fdStr, event);
 
 	callStat = cAssocArray_AddValue(base->all_events, fdStr, event);
 	if (callStat < 0) {
@@ -381,6 +370,75 @@ static int _mod_event(struct AMCEpoll *base, struct AMCEpollEvent *evObj, ev_cal
 	{
 		evObj->events = events & EP_EVENT_ALL_MASK;
 		return _epoll_mod(base, evObj);
+	}
+	else {
+		return 0;
+	}
+}
+
+#endif
+
+/********/
+#define __AMC_EPOLL_MAIN_LOOP
+#ifdef __AMC_EPOLL_MAIN_LOOP
+
+/* --------------------_dispatch_main_loop----------------------- */
+static int _dispatch_main_loop(struct AMCEpoll *base)
+{
+	struct epoll_event *evBuff = base->epoll_buff;
+	int evFd = base->epoll_fd;
+	int evSize = base->epoll_buff_size;
+	int nTotal = 0;
+	int nIndex = 0;
+	int errCpy = 0;
+	BOOL shouldExit = FALSE;
+
+	base->base_status = 0;
+
+	/* This is actually a thread-like process */
+	do {
+		nTotal = epoll_wait(evFd, evBuff, evSize, 1000);		// TODO: implement timeout
+		if (nTotal < 0) {
+			errCpy = errno;
+			ERROR("Failed in epoll_wait(): %s", strerror(errCpy));
+			base->base_status |= EP_STAT_EPOLL_ERROR;
+			shouldExit = TRUE;
+		}
+		else if (0 == nTotal) {
+			// TODO: Add support
+			DEBUG("Enjoy your peace...");
+		}
+		else {
+			DEBUG("%d event(s) active", nTotal);
+			int epoll_events = 0;
+			struct AMCEpollEvent *amcEvent = NULL;
+			for (nIndex = 0; nIndex < nTotal; nIndex ++)
+			{
+				epoll_events = evBuff[nIndex].events;
+				amcEvent = (struct AMCEpollEvent *)(evBuff[nIndex].data.ptr);
+
+				if (amcEvent)
+				{
+					_invoke_callback_if_necessary(amcEvent, epoll_events);
+
+					if (0 == (amcEvent->events & EP_MODE_PERSIST)) {
+						_free_event(base, amcEvent);
+						amcEvent = NULL;
+					}
+				}
+			}
+		}
+		// end of "else (nTotal < 0) {..."
+
+	} while (FALSE == shouldExit);
+	// end of "do - while (FALSE == shouldExit)"
+
+	/* clean status */
+	base->base_status &= ~EP_STAT_SHOULD_EXIT;
+
+	/* return */
+	if (base->base_status & EP_STAT_EPOLL_ERROR) {
+		_RETURN_ERR(errCpy);
 	}
 	else {
 		return 0;
@@ -675,6 +733,67 @@ int AMCFd_MakeCloseOnExec(int fd)
 			_RETURN_ERR(err);
 		}
 	}
+}
+
+
+/* --------------------AMCFd_Read----------------------- */
+ssize_t AMCFd_Read(int fd, void *rawBuf, size_t nbyte)
+{
+	int err = 0;
+	int callStat = 0;
+	ssize_t ret = 0;
+	uint8_t *buff = (uint8_t *)rawBuf;
+	BOOL isDone = FALSE;
+
+	if (fd < 0) {
+		_RETURN_ERR(EBADF);
+	}
+	if (NULL == buff) {
+		_RETURN_ERR(EINVAL);
+	}
+	if (0 == nbyte) {
+		return 0;
+	}
+
+	/* loop read */
+	while (FALSE == isDone)
+	{
+		callStat = read(fd, buff + ret, nbyte - ret);
+		err = errno;
+
+		if (0 == callStat) {
+			/* EOF */
+			ret = 0;
+			isDone = TRUE;
+		}
+		else if (callStat < 0)
+		{
+			if (EINTR == err) {
+				DEBUG("Fd %d EINTR", fd);
+				isDone = TRUE;
+			}
+			else if (EAGAIN == err) {
+				DEBUG("Fd %d EAGAIN", fd);
+				isDone = TRUE;
+			}
+			else {
+				ret = -1;
+				isDone = TRUE;
+			}
+		}
+		else
+		{
+			if (ret < nbyte) {
+				ret += callStat;
+			}
+			else {
+				isDone = TRUE;
+			}
+		}
+	}
+	// end of "while (FALSE == isDone)"
+
+	return ret;
 }
 
 

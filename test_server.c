@@ -36,18 +36,253 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#define _CFG_SRV_PORT		5656
+#define _CFG_SRV_PORT		8000
 #define _LOG(fmt, args...)		printf("[Srv - %04d] "fmt"\n", __LINE__, ##args)
+
+
+/********/
+#define __DEBUG_FUNCTIONS
+#ifdef __DEBUG_FUNCTIONS
+
+/* ------------------------------------------- */
+static char _char_from_byte(uint8_t byte)
+{
+	if ((byte >= '!') && (byte <= 0x7F))
+	{
+		return (char)byte;
+	}
+	else if ('\n' == byte)
+	{
+		return '.';
+	}
+	else if ('\r' == byte)
+	{
+		return '.';
+	}
+	else if (' ' == byte)
+	{
+		return ' ';
+	}
+	else
+	{
+		return '.';
+	}
+}
+
+
+/* ------------------------------------------- */
+void _print_data(const void *pData, const size_t size)
+{
+	size_t column, tmp;
+	char lineString[64] = "";
+	char linechar[24] = "";
+	size_t lineLen = 0;
+	uint8_t byte;
+	const uint8_t *data = pData;
+
+	printf ("---------------------------------------------------------------------------\n");
+	printf ("Base: 0x%08lx, length %d(0x%04x)\n", (unsigned long)(data), size, size);
+	printf ("----  +0 +1 +2 +3 +4 +5 +6 +7  +8 +9 +A +B +C +D +E +F    01234567 89ABCDEF\n");
+//	printf ("---------------------------------------------------------------------------\n");
+	
+	for (tmp = 0; 
+		(tmp + 16) <= size; 
+		tmp += 16)
+	{
+		memset(lineString, 0, sizeof(lineString));
+		memset(linechar, 0, sizeof(linechar));
+	
+		for (column = 0, lineLen = 0;
+			column < 16;
+			column ++)
+		{
+			byte = data[tmp + column];
+			sprintf(lineString + lineLen, "%02X ", byte & 0xFF);
+			
+			lineLen += 3;
+
+			if (column < 7)
+			{
+				linechar[column] = _char_from_byte(byte);
+			}
+			else if (7 == column)
+			{
+				linechar[column] = _char_from_byte(byte);
+				linechar[column+1] = ' ';
+				sprintf(lineString + lineLen, " ");
+				lineLen += 1;
+			}
+			else
+			{
+				linechar[column+1] = _char_from_byte(byte);
+			}
+		}
+
+		printf ("%04X: %s   %s\n", tmp, lineString, linechar);
+	}
+
+	/* last line */
+	if (tmp < size)
+	{
+		memset(lineString, 0, sizeof(lineString));
+		memset(linechar, 0, sizeof(linechar));
+	
+		for (column = 0, lineLen = 0;
+			column < (size - tmp);
+			column ++)
+		{
+			byte = data[tmp + column];
+			sprintf(lineString + lineLen, "%02X ", byte & 0xFF);
+			lineLen += 3;
+
+			if (column < 7)
+			{
+				linechar[column] = _char_from_byte(byte);
+			}
+			else if (7 == column)
+			{
+				linechar[column] = _char_from_byte(byte);
+				linechar[column+1] = ' ';
+				sprintf(lineString + lineLen, " ");
+				lineLen += 1;
+			}
+			else
+			{
+				linechar[column+1] = _char_from_byte(byte);
+			}
+		}
+#if 1
+		for (/* null */;
+			column < 16;
+			column ++)
+		{
+			sprintf(lineString + lineLen, "   ");
+			lineLen += 3;
+		
+			if (7 == column)
+			{
+				sprintf(lineString + lineLen, " ");
+				lineLen += 1;
+			}
+		}
+#endif
+		printf ("%04X: %s   %s\n", tmp, lineString, linechar);
+	}
+	
+	printf ("---------------------------------------------------------------------------\n");
+	
+	/* ends */
+}
+
+
+#endif
 
 /********/
 #define __EVENT_CALLBACKS
 #ifdef __EVENT_CALLBACKS
 
 /* ------------------------------------------- */
+static void _callback_read(int fd, uint16_t events, void *arg)
+{
+	struct AMCEpoll *base = (struct AMCEpoll *)arg;
+
+	if (events & EP_EVENT_FREE) {
+		_LOG("Close fd %d", fd);
+		close(fd);
+		fd = -1;
+	}
+	else if (events & EP_EVENT_ERROR) {
+		_LOG("Error on fd %d", fd);
+		AMCEpoll_DelEventByFd(base, fd);
+		fd = -1;
+	}
+	else if (events & EP_EVENT_READ) {
+		char buff[2048];
+		ssize_t readLen = 0;
+
+		readLen = AMCFd_Read(fd, buff, sizeof(buff));
+		if (0 == readLen) {
+			_LOG("EOF on fd %d", fd);
+			AMCEpoll_DelEventByFd(base, fd);
+			fd = -1;
+		}
+		else if (readLen < 0) {
+			_LOG("Failed in reading data: %s", strerror(errno));
+			AMCEpoll_DelEventByFd(base, fd);
+			fd = -1;
+		}
+		else {
+			_LOG("Read data:");
+			_print_data(buff, readLen);
+		}
+	}
+
+	return;
+}
+
+
+/* ------------------------------------------- */
 static void _callback_accept(int fd, uint16_t events, void *arg)
 {
-	// TODO:
-	_LOG("TODO: Accept()");
+	struct AMCEpoll *base = (struct AMCEpoll *)arg;
+
+	if (events & EP_EVENT_FREE) {
+		_LOG("Close fd %d", fd);
+		close(fd);
+		fd = -1;
+	}
+	else if (events & EP_EVENT_ERROR) {
+		_LOG("Error on fd %d", fd);
+		AMCEpoll_DelEventByFd(base, fd);
+		fd = -1;
+	}
+	else if (events & EP_EVENT_READ) {
+		BOOL isOK =TRUE;
+		int newFd = -1;
+		int callStat = 0;
+		struct sockaddr_in sockAddr;
+		socklen_t addrLen = sizeof(sockAddr);
+
+		newFd = accept(fd, (struct sockaddr *)(&sockAddr), &addrLen);
+		if (newFd < 0) {
+			_LOG("Failed to accept: %s", strerror(errno));
+			isOK = FALSE;
+		}
+		else if (fd > FD_SETSIZE) {
+			_LOG("fd > FD_SETSIZE");
+			isOK = FALSE;
+		}
+
+		if (isOK) {
+			callStat = AMCFd_MakeCloseOnExec(newFd);
+			if (callStat < 0) {
+				isOK = FALSE;
+			}
+		}
+
+		if (isOK) {
+			callStat = AMCFd_MakeNonBlock(newFd);
+			if (callStat < 0) {
+				isOK = FALSE;
+			}
+		}
+
+		if (isOK) {
+			callStat = AMCEpoll_AddEvent(base, newFd, EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_MODE_PERSIST,
+										0, _callback_read, base, NULL);
+			if (callStat < 0) {
+				_LOG("Failed to add read event");
+				isOK = FALSE;
+			}
+		}
+
+		if (FALSE == isOK) {
+			if (newFd > 0) {
+				close(newFd);
+				newFd = -1;
+			}
+		}
+	}
 	return;
 }
 
@@ -85,6 +320,14 @@ int _create_local_server(struct AMCEpoll *base)
 	if (callStat < 0) {
 		int err = errno;
 		_LOG("Failed to bind for fd %d: %s", fd, strerror(err));
+		errno = err;
+		goto ERROR;
+	}
+
+	callStat = listen(fd, 65565);
+	if (callStat < 0) {
+		int err = errno;
+		_LOG("Failed to listen for fd %d: %s", fd, strerror(err));
 		errno = err;
 		goto ERROR;
 	}
