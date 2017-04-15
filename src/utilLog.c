@@ -79,6 +79,7 @@ ssize_t utilLog(int level, const char *format, ...)
 	}
 	else {
 		char buff[CFG_MAX_LOG_LEN] = "";
+		char usec[8] = "";
 		va_list vaList;
 		
 		size_t prefixLen = 0;
@@ -91,9 +92,12 @@ ssize_t utilLog(int level, const char *format, ...)
 		localtime_r(&secOfAll, &timeOfDay);
 		gettimeofday(&currDayTime, NULL);
 
-		prefixLen = sprintf(buff, "%04d-%02d-%02d,%02d:%02d:%02d.%06ld %s ", 
+		sprintf(usec, "%d", (int)(currDayTime.tv_usec));
+		usec[3] = '\0';
+
+		prefixLen = sprintf(buff, "%04d-%02d-%02d,%02d:%02d:%02d.%s %s ", 
 						timeOfDay.tm_year + 1900, timeOfDay.tm_mon + 1, timeOfDay.tm_mday,
-						timeOfDay.tm_hour, timeOfDay.tm_min, timeOfDay.tm_sec, currDayTime.tv_usec,
+						timeOfDay.tm_hour, timeOfDay.tm_min, timeOfDay.tm_sec, usec,
 						g_log_level_string[level]);
 
 		va_start(vaList, format);

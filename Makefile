@@ -9,7 +9,7 @@ C_ASSOC_ARRAY_URL = https://github.com/Andrew-M-C/cAssocArray.git
 PWD = $(shell pwd)
 
 CFLAGS += -I$(PWD)/include -Wall -fPIC -DCFG_LOG_LEVEL=7
-LDFLAGS += -lpthread -lrt
+LDFLAGS += -pthread -lrt
 
 # main rules
 .PHONY: all
@@ -20,7 +20,6 @@ all: $(C_ASSOC_ARRAY_DIR) libamcepoll.a libamcepoll.so test
 # test process
 .PHONY: test
 test: test_server
-	@echo '<< make $@ done >>'
 
 test_server: test_server.o
 	$(CC) test_server.o -o $@ $(LDFLAGS) -lamcepoll -L./ -static
@@ -42,8 +41,7 @@ clean:
 ###########################
 # distclean
 .PHONY: distclean
-distclean: clean
-	-rm -rf $(C_ASSOC_ARRAY_DIR)/
+distclean: clean clean_$(C_ASSOC_ARRAY_DIR)
 	@echo '<< make $@ done >>'
 
 ###########################
@@ -56,8 +54,17 @@ $(C_ASSOC_ARRAY_DIR):
 		mkdir $(C_ASSOC_ARRAY_DIR); \
 		echo "Now cloning $(C_ASSOC_ARRAY_URL)"; \
 		git clone $(C_ASSOC_ARRAY_URL) $(PWD)/$(C_ASSOC_ARRAY_DIR); \
-		echo '<< make $@ done >>'; \
+		echo '<< clone $@ done >>'; \
 	fi
+
+.PHONY: clean_$(C_ASSOC_ARRAY_DIR)
+clean_$(C_ASSOC_ARRAY_DIR):
+	-rm -rf $(C_ASSOC_ARRAY_DIR)/
+	@echo '<< make $@ done >>'
+
+.PHONY: update
+update: clean_$(C_ASSOC_ARRAY_DIR) $(C_ASSOC_ARRAY_DIR)
+
 
 ###########################
 # libamcepoll

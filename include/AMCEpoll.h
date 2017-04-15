@@ -32,6 +32,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <errno.h>
 
 /********/
 /* data types */
@@ -39,7 +40,9 @@ struct AMCEpoll;
 struct AMCEpollEvent;
 
 #ifndef NULL
+#ifndef _DO_NOT_DEFINE_NULL
 #define NULL	((void*)0)
+#endif
 #endif
 
 #ifndef BOOL
@@ -78,9 +81,15 @@ int
 int 
 	AMCEpoll_DelEventByFd(struct AMCEpoll *obj, int fd);
 int 
+	AMCEpoll_GetFdByEvent(struct AMCEpollEvent *event);
+int 
 	AMCEpoll_Dispatch(struct AMCEpoll *obj);
 int 
 	AMCEpoll_LoopExit(struct AMCEpoll *obj);
+int 
+	AMCFd_MakeNonBlock(int fd);
+int 
+	AMCFd_MakeCloseOnExec(int fd);
 
 
 #endif

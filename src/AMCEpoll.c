@@ -37,6 +37,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #endif
 
@@ -273,9 +275,6 @@ static struct AMCEpollEvent *_get_event_for_fd(struct AMCEpoll *base, int fd)
 
 	snprintf(fdStr, sizeof(fdStr), "%d", fd);
 	ret = (struct AMCEpollEvent *)cAssocArray_GetValue(base->all_events, fdStr);
-	if (NULL == ret) {
-		NOTICE("Fd %d was not added before.", fd);
-	}
 	return ret;
 }
 
@@ -351,6 +350,7 @@ static int _add_event(struct AMCEpoll *base, struct AMCEpollEvent *event)
 	int callStat = 0;
 	char fdStr[MAX_FD_STR_LEN];
 	snprintf(fdStr, sizeof(fdStr), "%d", event->fd);
+	DEBUG("Add New event %s", fdStr);
 
 	callStat = cAssocArray_AddValue(base->all_events, fdStr, event);
 	if (callStat < 0) {
@@ -487,7 +487,7 @@ int AMCEpoll_Free(struct AMCEpoll *obj)
 
 
 /* --------------------AMCEpoll_AddEvent----------------------- */
-int	AMCEpoll_AddEvent(struct AMCEpoll *obj, int fd, uint16_t events, int timeout, ev_callback callback, void *userData, struct AMCEpollEvent **eventOut)
+int AMCEpoll_AddEvent(struct AMCEpoll *obj, int fd, uint16_t events, int timeout, ev_callback callback, void *userData, struct AMCEpollEvent **eventOut)
 {
 	int ret = 0;
 	struct AMCEpollEvent *anEvent = NULL;
@@ -513,20 +513,6 @@ int	AMCEpoll_AddEvent(struct AMCEpoll *obj, int fd, uint16_t events, int timeout
 	if (NULL == anEvent)
 	{
 		/* This is an new event */
-		ret = _mod_event(obj, anEvent, callback, userData, events);
-		if (ret < 0) {
-			goto ERR_END;
-		}
-		else {
-			if (eventOut) {
-				*eventOut = anEvent;
-			}
-			return 0;
-		}
-	}
-	else
-	{
-		/* This is an existed event */
 		anEvent = _new_event(fd, callback, userData, events);
 		if (NULL == anEvent) {
 			ret = errno;
@@ -548,6 +534,20 @@ int	AMCEpoll_AddEvent(struct AMCEpoll *obj, int fd, uint16_t events, int timeout
 			}
 		}
 		// end of "else (NULL == anEvent) {..."
+	}
+	else
+	{
+		/* This is an existed event */
+		ret = _mod_event(obj, anEvent, callback, userData, events);
+		if (ret < 0) {
+			goto ERR_END;
+		}
+		else {
+			if (eventOut) {
+				*eventOut = anEvent;
+			}
+			return 0;
+		}
 	}
 	// end of: "else (NULL == anEvent) {..."
 
@@ -594,13 +594,30 @@ int AMCEpoll_DelEventByFd(struct AMCEpoll *obj, int fd)
 }
 
 
+/* --------------------AMCEpoll_GetFdByEvent----------------------- */
+int AMCEpoll_GetFdByEvent(struct AMCEpollEvent *event)
+{
+	if (NULL == event) {
+		ERROR("Nil parameter");
+		_RETURN_ERR(EINVAL);
+	}
+	else {
+		return event->fd;
+	}
+}
+
+
 /* --------------------AMCEpoll_DelEvent----------------------- */
 int AMCEpoll_Dispatch(struct AMCEpoll *obj)
 {
 	if (NULL == obj) {
 		ERROR("Nil parameter");
 		_RETURN_ERR(EINVAL);
-	} else {
+	} 
+	else if (0 == cAssocArray_Size(obj->all_events)) {
+		return 0;
+	}
+	else {
 		return _dispatch_main_loop(obj);
 	}
 }
@@ -615,6 +632,48 @@ int AMCEpoll_LoopExit(struct AMCEpoll *obj)
 	} else {
 		obj->base_status |= EP_STAT_SHOULD_EXIT;
 		return 0;
+	}
+}
+
+
+/* --------------------AMCFd_MakeNonBlock----------------------- */
+int AMCFd_MakeNonBlock(int fd)
+{
+	if (fd < 0) {
+		ERROR("Invalid file descriptor");
+		_RETURN_ERR(EINVAL);
+	}
+	else {
+		int flags = fcntl(fd, F_GETFL, NULL);
+		flags = fcntl(fd, F_SETFL, (flags | O_NONBLOCK));
+		if (0 == flags) {
+			return 0;
+		} else {
+			int err = errno;
+			ERROR("Failed to set O_NONBLOCK for fd %d: %s", fd, strerror(err));
+			_RETURN_ERR(err);
+		}
+	}
+}
+
+
+/* --------------------AMCFd_MakeCloseOnExec----------------------- */
+int AMCFd_MakeCloseOnExec(int fd)
+{
+	if (fd < 0) {
+		ERROR("Invalid file descriptor");
+		_RETURN_ERR(EINVAL);
+	}
+	else {
+		int flags = fcntl(fd, F_GETFD, NULL);
+		flags = fcntl(fd, F_SETFD, (flags | FD_CLOEXEC));
+		if (0 == flags) {
+			return 0;
+		} else {
+			int err = errno;
+			ERROR("Failed to set FD_CLOEXEC for fd %d: %s", fd, strerror(err));
+			_RETURN_ERR(err);
+		}
 	}
 }
 
