@@ -30,6 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -181,6 +182,45 @@ void _print_data(const void *pData, const size_t size)
 #define __EVENT_CALLBACKS
 #ifdef __EVENT_CALLBACKS
 
+static const char g_fmtHttpHeader[] = ""
+		"HTTP/1.0 200 OK\r\n"
+		"Content-Type: text/html\r\n"
+		"Content-Language: en\r\n"
+		"Transfer-Encoding: chunked\r\n"
+		"Server: AMCEpoll/1.0.0beta\r\n"
+		"Date: %a, %d %b %Y %H:%M:%S %Z\r\n"
+		"Connection: keep-alive\r\n"
+	"";
+
+
+static const char g_respData[] = ""
+		"<!DOCTYPE html>"
+		"<html>"
+			"<head>"
+				"<title>Hello, epoll!</title>"
+			"</head>"
+			"<body>"
+			"</body>"
+		"</html>"
+		"\r\n\r\n"
+	"";
+
+
+static ssize_t _write_http_data(int fd)
+{
+	char buff[2048] = "";
+	struct tm tm;
+	time_t t;
+
+	t = time(NULL);
+	gmtime_r(&t, &tm);
+
+	strftime(buff, sizeof(buff), g_fmtHttpHeader, &tm);
+	strcat(buff, g_respData);
+	return write(fd, buff, strlen(buff));
+}
+
+
 /* ------------------------------------------- */
 static void _callback_read(int fd, uint16_t events, void *arg)
 {
@@ -212,8 +252,19 @@ static void _callback_read(int fd, uint16_t events, void *arg)
 			fd = -1;
 		}
 		else {
+			ssize_t callStat = 0;
+			ssize_t writeLen = 0;
+
 			_LOG("Read data:");
 			_print_data(buff, readLen);
+
+			callStat = _write_http_data(fd);
+			if (callStat > 0) {
+				writeLen += callStat;
+			}
+
+			_LOG("Written %d bytes", callStat);
+			AMCEpoll_DelEventByFd(base, fd);
 		}
 	}
 
@@ -322,6 +373,9 @@ int _create_local_server(struct AMCEpoll *base)
 		_LOG("Failed to bind for fd %d: %s", fd, strerror(err));
 		errno = err;
 		goto ERROR;
+	}
+	else {
+		_LOG("Server binded at Port: %d", ntohs(address.sin_port));
 	}
 
 	callStat = listen(fd, 65565);

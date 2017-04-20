@@ -398,11 +398,16 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 	/* This is actually a thread-like process */
 	do {
 		nTotal = epoll_wait(evFd, evBuff, evSize, 1000);		// TODO: implement timeout
+		errCpy = errno;
 		if (nTotal < 0) {
-			errCpy = errno;
-			ERROR("Failed in epoll_wait(): %s", strerror(errCpy));
-			base->base_status |= EP_STAT_EPOLL_ERROR;
-			shouldExit = TRUE;
+			if (EINTR == errCpy) {
+				// TODO: Support signal events
+			}
+			else {
+				ERROR("Failed in epoll_wait(): %s", strerror(errCpy));
+				base->base_status |= EP_STAT_EPOLL_ERROR;
+				shouldExit = TRUE;
+			}
 		}
 		else if (0 == nTotal) {
 			// TODO: Add support
