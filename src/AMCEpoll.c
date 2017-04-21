@@ -40,6 +40,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <signal.h>
 
 #endif
 
@@ -52,6 +53,7 @@
 enum {
 	EP_STAT_SHOULD_EXIT = (1 << 0),
 	EP_STAT_EPOLL_ERROR = (1 << 1),
+	EP_STAT_RUNNING =     (1 << 2),
 	/* for future use */
 };
 
@@ -394,6 +396,7 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 	BOOL shouldExit = FALSE;
 
 	base->base_status = 0;
+	base->base_status |= EP_STAT_RUNNING;
 
 	/* This is actually a thread-like process */
 	do {
@@ -439,7 +442,7 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 	// end of "do - while (FALSE == shouldExit)"
 
 	/* clean status */
-	base->base_status &= ~EP_STAT_SHOULD_EXIT;
+	base->base_status &= ~(EP_STAT_SHOULD_EXIT | EP_STAT_RUNNING);
 
 	/* return */
 	if (base->base_status & EP_STAT_EPOLL_ERROR) {
@@ -768,7 +771,8 @@ ssize_t AMCFd_Read(int fd, void *rawBuf, size_t nbyte)
 
 		if (0 == callStat) {
 			/* EOF */
-			ret = 0;
+			DEBUG("Fd %d EOF", fd);
+			//ret = 0;
 			isDone = TRUE;
 		}
 		else if (callStat < 0)
