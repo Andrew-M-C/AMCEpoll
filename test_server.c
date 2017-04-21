@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <signal.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -42,8 +43,114 @@
 
 
 /********/
+#define __SIGNAL_OPERATIONS
+#ifdef __SIGNAL_OPERATIONS
+
+enum {
+	PIPE_READ = 0,
+	PIPE_WRITE = 1,
+};
+
+static int g_signal_pipe[2] = {-1, -1};
+
+/* ------------------------------------------- */
+static void _sigquit_handler(int signum)
+{
+	if (g_signal_pipe[PIPE_WRITE] > 0) {
+		write(g_signal_pipe[PIPE_WRITE], &signum, sizeof(signum));
+	}
+	return;
+}
+
+
+/* ------------------------------------------- */
+static void _callback_signal_read(int fd, uint16_t events, void *arg)
+{
+	int signum = 0;
+	ssize_t callStat = 0;
+	if (events & EP_EVENT_READ)
+	{
+		callStat = AMCFd_Read(fd, &signum, sizeof(signum));
+		if (callStat < 0) {
+			_LOG("Failed to read data: %s", strerror(errno));
+		}
+		else if (0 == callStat) {
+			//_LOG("Fin %d", signum);
+		}
+		else if (sizeof(signum) == callStat) {
+			_LOG("Got event: %s", strsignal(signum));
+			_callback_signal_read(fd, events, arg);
+		}
+		else {
+			_LOG("Illegal return status: %d", callStat);
+		}
+	}
+	else {
+		_LOG("Unsupported event: 0x%x", events);
+	}
+
+	return;
+}
+
+
+/* ------------------------------------------- */
+static int _create_signal_handler(struct AMCEpoll *base)
+{
+	int callStat = 0;
+	callStat = pipe(g_signal_pipe);
+	if (callStat < 0) {
+		_LOG("Failed in pipe(): %s", strerror(errno));
+		return -1;
+	}
+
+	callStat = AMCFd_MakeCloseOnExec(g_signal_pipe[PIPE_READ]);
+	if (callStat < 0) {
+		return -1;
+	}
+
+	callStat = AMCFd_MakeCloseOnExec(g_signal_pipe[PIPE_WRITE]);
+	if (callStat < 0) {
+		return -1;
+	}
+
+	callStat = AMCFd_MakeNonBlock(g_signal_pipe[PIPE_READ]);
+	if (callStat < 0) {
+		return -1;
+	}
+
+	callStat = AMCFd_MakeNonBlock(g_signal_pipe[PIPE_WRITE]);
+	if (callStat < 0) {
+		return -1;
+	}
+
+	signal(SIGQUIT, _sigquit_handler);
+
+	callStat = AMCEpoll_AddEvent(base, g_signal_pipe[PIPE_READ], 
+								EP_EVENT_READ | EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_FREE, 
+								0, _callback_signal_read, base, NULL);
+	if (callStat < 0) {
+		return -1;
+	}
+
+	return 0;
+}
+
+
+
+
+#endif
+
+
+
+/********/
 #define __DEBUG_FUNCTIONS
 #ifdef __DEBUG_FUNCTIONS
+
+/* ------------------------------------------- */
+static void _general_test()
+{
+	return;
+}
 
 /* ------------------------------------------- */
 static char _char_from_byte(uint8_t byte)
@@ -416,9 +523,16 @@ int main(int argc, char* argv[])
 	int callStat = 0;
 	struct AMCEpoll *base = NULL;
 	_LOG("Hello, AMCEpoll!");
+
+	_general_test();
 	
 	base = AMCEpoll_New(1024);
 	if (NULL == base) {
+		goto END;
+	}
+
+	callStat = _create_signal_handler(base);
+	if (callStat < 0) {
 		goto END;
 	}
 
