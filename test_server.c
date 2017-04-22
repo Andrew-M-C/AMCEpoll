@@ -39,7 +39,9 @@
 #include <arpa/inet.h>
 
 #define _CFG_SRV_PORT		8000
-#define _LOG(fmt, args...)		printf("[Srv - %04d] "fmt"\n", __LINE__, ##args)
+#define _LOG(fmt, args...)		printf("[Srv - %04ld] "fmt"\n", _LONG(__LINE__), ##args)
+
+#define _LONG(x)	((long)(x))
 
 
 /********/
@@ -82,7 +84,7 @@ static void _callback_signal_read(int fd, uint16_t events, void *arg)
 			_callback_signal_read(fd, events, arg);
 		}
 		else {
-			_LOG("Illegal return status: %d", callStat);
+			_LOG("Illegal return status: %ld", _LONG(callStat));
 		}
 	}
 	else {
@@ -189,7 +191,7 @@ void _print_data(const void *pData, const size_t size)
 	const uint8_t *data = pData;
 
 	printf ("---------------------------------------------------------------------------\n");
-	printf ("Base: 0x%08lx, length %d(0x%04x)\n", (unsigned long)(data), size, size);
+	printf ("Base: 0x%08lx, length %ld(0x%04lx)\n", (unsigned long)(data), _LONG(size), _LONG(size));
 	printf ("----  +0 +1 +2 +3 +4 +5 +6 +7  +8 +9 +A +B +C +D +E +F    01234567 89ABCDEF\n");
 //	printf ("---------------------------------------------------------------------------\n");
 	
@@ -226,7 +228,7 @@ void _print_data(const void *pData, const size_t size)
 			}
 		}
 
-		printf ("%04X: %s   %s\n", tmp, lineString, linechar);
+		printf ("%04lX: %s   %s\n", _LONG(tmp), lineString, linechar);
 	}
 
 	/* last line */
@@ -274,7 +276,7 @@ void _print_data(const void *pData, const size_t size)
 			}
 		}
 #endif
-		printf ("%04X: %s   %s\n", tmp, lineString, linechar);
+		printf ("%04lX: %s   %s\n", _LONG(tmp), lineString, linechar);
 	}
 	
 	printf ("---------------------------------------------------------------------------\n");
@@ -370,7 +372,7 @@ static void _callback_read(int fd, uint16_t events, void *arg)
 				writeLen += callStat;
 			}
 
-			_LOG("Written %d bytes", callStat);
+			_LOG("Written %ld bytes", _LONG(callStat));
 			AMCEpoll_DelEventByFd(base, fd);
 		}
 	}
