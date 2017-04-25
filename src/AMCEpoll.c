@@ -748,7 +748,7 @@ int AMCFd_MakeCloseOnExec(int fd)
 ssize_t AMCFd_Read(int fd, void *rawBuf, size_t nbyte)
 {
 	int err = 0;
-	int callStat = 0;
+	ssize_t callStat = 0;
 	ssize_t ret = 0;
 	uint8_t *buff = (uint8_t *)rawBuf;
 	BOOL isDone = FALSE;
@@ -764,8 +764,7 @@ ssize_t AMCFd_Read(int fd, void *rawBuf, size_t nbyte)
 	}
 
 	/* loop read */
-	while (FALSE == isDone)
-	{
+	do {
 		callStat = read(fd, buff + ret, nbyte - ret);
 		err = errno;
 
@@ -779,30 +778,73 @@ ssize_t AMCFd_Read(int fd, void *rawBuf, size_t nbyte)
 		{
 			if (EINTR == err) {
 				DEBUG("Fd %d EINTR", fd);
-				isDone = TRUE;
-			}
-			else if (EAGAIN == err) {
+				/* continue */
+			} else if (EAGAIN == err) {
 				DEBUG("Fd %d EAGAIN", fd);
 				isDone = TRUE;
-			}
-			else {
+			} else {
+				DEBUG("Fd %d error in read(): %s", strerror(err));
 				ret = -1;
 				isDone = TRUE;
 			}
 		}
 		else
 		{
-			if (ret < nbyte) {
-				ret += callStat;
+			ret += callStat;
+
+			if (ret >= nbyte) {
+				isDone = TRUE;
 			}
-			else {
+		}
+	} while (FALSE == isDone);
+	// end of "while (FALSE == isDone)"
+
+	return ret;
+}
+
+
+/* --------------------AMCFd_Write----------------------- */
+ssize_t AMCFd_Write(int fd, const void *buff, size_t nbyte)
+{
+	int err = 0;
+	ssize_t ret = 0;
+	ssize_t callStat = 0;
+	BOOL isDone = FALSE;
+
+	if (fd < 0) {
+		_RETURN_ERR(EBADF);
+	}
+	if (NULL == buff) {
+		_RETURN_ERR(EINVAL);
+	}
+	if (0 == nbyte) {
+		return 0;
+	}
+
+	do {
+		callStat = write(fd, buff + ret, nbyte - ret);
+		if (callStat < 0) {
+			err = errno;
+			if (EINTR == errno) {
+				/* continue */
+			} else if (EAGAIN == errno) {
+				isDone = TRUE;
+			} else {
+				DEBUG("Fd %d error in write(): %s", strerror(err));
+				ret = (ret > 0) ? ret : -1;
+				isDone = TRUE;
+			}
+		}
+		else {
+			ret += callStat;
+			if (ret >= nbyte) {
 				isDone = TRUE;
 			}
 		}
 	}
-	// end of "while (FALSE == isDone)"
+	while (FALSE == isDone);
 
-	return ret;
+	return ret; 
 }
 
 

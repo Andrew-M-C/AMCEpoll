@@ -92,6 +92,8 @@ int
 	AMCFd_MakeCloseOnExec(int fd);
 ssize_t 
 	AMCFd_Read(int fd, void *buff, size_t nbyte);
+ssize_t 
+	AMCFd_Write(int fd, const void *buff, size_t nbyte);
 
 
 #endif
