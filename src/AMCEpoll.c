@@ -28,6 +28,7 @@
 #define __HEADERS
 #ifdef __HEADERS
 
+#include "epCommon.h"
 #include "utilLog.h"
 #include "AMCEpoll.h"
 #include "cAssocArray.h"
@@ -63,23 +64,6 @@ enum {
 	EP_EVENT_WRITE | EP_EVENT_ERROR | EP_EVENT_FREE | \
 	EP_EVENT_TIMEOUT\
 	)
-typedef struct epoll_event epoll_event_st;
-
-struct AMCEpollEvent {
-	int            fd;
-	ev_callback    callback;
-	void          *user_data;
-	uint16_t       events;
-};
-
-
-struct AMCEpoll {
-	int             epoll_fd;
-	uint32_t        base_status;
-	cAssocArray    *all_events;
-	size_t          epoll_buff_size;
-	epoll_event_st  epoll_buff[0];
-};
 
 #define _RETURN_ERRNO()	\
 	do{\

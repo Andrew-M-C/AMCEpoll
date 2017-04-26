@@ -53,7 +53,9 @@ struct AMCEpollEvent;
 #endif
 #endif
 
-/* for uint16_t "events" */
+typedef uint16_t events_t;
+
+/* for events_t "events" */
 enum {
 	EP_EVENT_READ    = (1 << 0),
 	EP_EVENT_WRITE   = (1 << 1),
@@ -66,7 +68,7 @@ enum {
 };
 
 /* callback */
-typedef void (*ev_callback)(int fd, uint16_t events, void *arg);
+typedef void (*ev_callback)(int fd, events_t events, void *arg);
 
 /********/
 /* functions */
