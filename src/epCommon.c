@@ -34,6 +34,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <sys/epoll.h>
 
 #endif
 
@@ -57,6 +58,7 @@ struct AMCEpollEvent *epCommon_NewEmptyEvent()
 		newEvent->inter_data = NULL;
 		newEvent->epoll_events = 0;
 		newEvent->events = 0;
+		newEvent->detach_func = NULL;
 	}
 	
 	return newEvent;
@@ -134,11 +136,58 @@ int epCommon_InvokeCallback(struct AMCEpollEvent *event, int fdOrSig, events_t e
 	}
 
 	/* Do any bit mask set? */
-	if (event->events != ((event->events) & (~eventCodes)))
-	{
-		(event->callback)(fdOrSig, eventCodes, event->user_data);
+	if (BITS_HAVE_INTRSET(event->events, eventCodes)) {
+		(event->callback)(event, fdOrSig, eventCodes, event->user_data);
 	}
 	return 0;
+}
+
+
+/* --------------------epCommon_IsFileEvent----------------------- */
+BOOL epCommon_IsFileEvent(events_t events)
+{
+	return BITS_ANY_SET(events, (EP_EVENT_READ | EP_EVENT_WRITE));
+}
+
+
+/* --------------------epCommon_IsTimeoutEvent----------------------- */
+BOOL epCommon_IsTimeoutEvent(events_t events)
+{
+	if (epCommon_IsFileEvent(events)) {
+		return FALSE;
+	} else {
+		return BITS_ANY_SET(events, EP_EVENT_TIMEOUT);
+	}
+}
+
+
+/* --------------------epCommon_IsSignalEvent----------------------- */
+BOOL epCommon_IsSignalEvent(events_t events)
+{
+	// TODO:
+	return FALSE;
+}
+
+
+/* --------------------epCommon_IsSignalEvent----------------------- */
+events_t epCommon_EventCodeEpollToAmc(int epollEvents)
+{
+	events_t amcEvents = 0;
+
+	if (epollEvents & EPOLLERR) {
+		amcEvents |= EP_EVENT_ERROR;
+	}
+	if (epollEvents & EPOLLHUP) {
+		amcEvents |= EP_EVENT_ERROR;
+	}
+	if ((epollEvents & EPOLLIN) || (epollEvents & EPOLLPRI)) {
+		amcEvents |= EP_EVENT_READ;
+	}
+	if (epollEvents & EPOLLOUT) {
+		amcEvents |= EP_EVENT_WRITE;
+	}
+
+	return amcEvents;
 }
 
 

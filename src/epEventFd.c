@@ -125,6 +125,20 @@ static int _epoll_mod(struct AMCEpoll *base, struct AMCEpollEvent *amcEvent)
 }
 
 
+/* --------------------_epoll_del----------------------- */
+static int _epoll_del(struct AMCEpoll *base, struct AMCEpollEvent *amcEvent)
+{
+	int callStat = epoll_ctl(base->epoll_fd, EPOLL_CTL_DEL, amcEvent->fd, NULL);
+	if (0 == callStat) {
+		return 0;
+	} else {
+		int err = errno;
+		ERROR("Failed in epoll_del(): %s", strerror(err));
+		_RETURN_ERR(err);
+	}
+}
+
+
 #endif
 
 
@@ -221,6 +235,13 @@ static int _mod_fd_event(struct AMCEpoll *base, struct AMCEpollEvent *event)
 }
 
 
+/* --------------------_del_fd_event----------------------- */
+static int _del_fd_event(struct AMCEpoll *base, struct AMCEpollEvent *event)
+{
+	return _epoll_del(base, event);
+}
+
+
 #endif
 
 /********/
@@ -258,6 +279,7 @@ struct AMCEpollEvent *epEventFd_Create(int fd, events_t events, int timeout, ev_
 	newEvent->inter_data = NULL;
 	newEvent->epoll_events = _epoll_events_from_amc_events(events);
 	newEvent->events = events;
+	newEvent->detach_func = epEventFd_DetachFromBase;
 
 ENDS:
 	return newEvent;
@@ -350,6 +372,7 @@ int epEventFd_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 		_RETURN_ERR(EINVAL);
 	}
 	else {
+		int callStat = 0;
 		char key[EVENT_KEY_LEN_MAX];
 		struct AMCEpollEvent *eventInBase = NULL;
 
@@ -359,6 +382,13 @@ int epEventFd_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 		if (eventInBase != event) {
 			ERROR("Event %p is not menber of Base %p", event, base);
 			_RETURN_ERR(ENOENT);
+		}
+
+		callStat = _del_fd_event(base, event);
+		if (callStat < 0) {
+			int err = errno;
+			ERROR("Failed to del event in epoll_ctl(): %s", strerror(errno));
+			_RETURN_ERR(err);
 		}
 
 		if (epCommon_DetachEvent(base, key)) {

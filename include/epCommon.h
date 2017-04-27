@@ -27,6 +27,7 @@
 #ifndef __EP_COMMON_H__
 #define __EP_COMMON_H__
 
+/* headers */
 #include <stdint.h>
 #include <unistd.h>
 #include <sys/epoll.h>
@@ -34,7 +35,9 @@
 #include "cAssocArray.h"
 #include "AMCEpoll.h"
 
+/* data structures */
 typedef struct epoll_event epoll_event_st;
+typedef int (*detach_func)(struct AMCEpoll *base, struct AMCEpollEvent *event);
 
 struct AMCEpollEvent {
 	int            fd;
@@ -43,6 +46,7 @@ struct AMCEpollEvent {
 	void          *inter_data;
 	int            epoll_events;
 	events_t       events;
+	detach_func    detach_func;
 };
 
 
@@ -54,9 +58,15 @@ struct AMCEpoll {
 	epoll_event_st  epoll_buff[0];
 };
 
+/* constants */
 #define EVENT_KEY_LEN_MAX	(32)
 
+/* tools */
+#define BITS_ANY_SET(val, bits)		(0 != ((val) & (bits)))
+#define BITS_ALL_SET(val, bits)		(bits == ((val) & (bits)))
+#define BITS_HAVE_INTRSET(bitA, bitB)	((bitA) != ((bitA) & (~(bitB))))		/* The two bits have intersetion */
 
+/* common interfaces */
 struct AMCEpollEvent *
 	epCommon_NewEmptyEvent(void);
 int 
@@ -69,6 +79,14 @@ struct AMCEpollEvent *
 	epCommon_DetachEvent(struct AMCEpoll *base, const char *key);
 int 
 	epCommon_InvokeCallback(struct AMCEpollEvent *event, int fdOrSig, events_t eventCodes);
+BOOL 
+	epCommon_IsFileEvent(events_t events);
+BOOL 
+	epCommon_IsTimeoutEvent(events_t events);
+BOOL 
+	epCommon_IsSignalEvent(events_t events);
+events_t 
+	epCommon_EventCodeEpollToAmc(int epollEvents);
 
 #endif
 /* EOF */

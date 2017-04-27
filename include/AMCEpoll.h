@@ -68,22 +68,24 @@ enum {
 };
 
 /* callback */
-typedef void (*ev_callback)(int fd, events_t events, void *arg);
+typedef void (*ev_callback)(struct AMCEpollEvent *event, int fd, events_t events, void *arg);
 
 /********/
 /* functions */
 struct AMCEpoll *
-	AMCEpoll_New(size_t buffSize);
+	AMCEpoll_New(size_t poolSize);
 int
-	AMCEpoll_Free(struct AMCEpoll *obj);
+	AMCEpoll_Free(struct AMCEpoll *base);
+struct AMCEpollEvent *
+	AMCEpoll_NewFileEvent(int fd, events_t events, int timeout, ev_callback callback, void *userData);
 int 
-	AMCEpoll_AddEvent(struct AMCEpoll *obj, int fd, uint16_t events, int timeout, ev_callback callback, void *userData, struct AMCEpollEvent **eventOut);
+	AMCEpoll_FreeEvent(struct AMCEpollEvent *event);
 int 
-	AMCEpoll_DelEvent(struct AMCEpoll *obj, struct AMCEpollEvent *event);
+	AMCEpoll_AddEvent(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
-	AMCEpoll_DelEventByFd(struct AMCEpoll *obj, int fd);
+	AMCEpoll_DelEvent(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
-	AMCEpoll_GetFdByEvent(struct AMCEpollEvent *event);
+	AMCEpoll_DelAndFreeEvent(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
 	AMCEpoll_Dispatch(struct AMCEpoll *obj);
 int 
