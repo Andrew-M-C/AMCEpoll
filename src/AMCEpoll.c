@@ -30,6 +30,7 @@
 
 #include "epCommon.h"
 #include "epEventFd.h"
+#include "epEventSignal.h"
 #include "utilLog.h"
 #include "AMCEpoll.h"
 #include "cAssocArray.h"
@@ -317,6 +318,9 @@ int AMCEpoll_FreeEvent(struct AMCEpollEvent *event)
 	}
 	else if (epEventFd_TypeMatch(event)) {
 		return epEventFd_Destroy(event);
+	}
+	else if (epEventSignal_TypeMatch(event)) {
+		return epEventSignal_Destroy(event);
 	}
 	else {
 		ERROR("Unknown event type: 0x%04lx", event->events);

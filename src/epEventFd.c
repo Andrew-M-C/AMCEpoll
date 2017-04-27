@@ -160,37 +160,6 @@ static BOOL _check_events(events_t events)
 }
 
 
-/* --------------------_epoll_events_from_amc_events----------------------- */
-static int _epoll_events_from_amc_events(events_t events)
-{
-	int ret = 0;
-	if (0 == (events & EP_MODE_PERSIST)) {
-		ret |= EPOLLONESHOT;
-	}
-	if (events & EP_MODE_EDGE) {
-		ret |= EPOLLET;
-	}
-	if (events & EP_EVENT_READ) {
-		ret |= EPOLLIN | EPOLLPRI;
-	}
-	if (events & EP_EVENT_WRITE) {
-		ret |= EPOLLOUT;
-	}
-	if (events & EP_EVENT_ERROR) {
-		ret |= EPOLLERR | EPOLLHUP;
-	}
-#if 0
-	if (amcEv & EP_EVENT_FREE) {
-		/* nothing */
-	}
-	if (amcEv & EP_EVENT_TIMEOUT) {
-		/* nothing */
-	}
-#endif
-	return ret;
-}
-
-
 /* --------------------_snprintf_fd_key----------------------- */
 static void _snprintf_fd_key(struct AMCEpollEvent *event, char *str, size_t buffLen)
 {
@@ -277,7 +246,7 @@ struct AMCEpollEvent *epEventFd_Create(int fd, events_t events, int timeout, ev_
 	newEvent->callback = callback;
 	newEvent->user_data = userData;
 	newEvent->inter_data = NULL;
-	newEvent->epoll_events = _epoll_events_from_amc_events(events);
+	newEvent->epoll_events = _epoll_code_from_amc_code(events);
 	newEvent->events = events;
 	newEvent->detach_func = epEventFd_DetachFromBase;
 

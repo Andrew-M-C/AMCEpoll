@@ -62,6 +62,7 @@ enum {
 	EP_EVENT_ERROR   = (1 << 2),
 	EP_EVENT_FREE    = (1 << 3),
 	EP_EVENT_TIMEOUT = (1 << 4),
+	EP_EVENT_SIGNAL  = (1 << 5),
 
 	EP_MODE_PERSIST  = (1 << 8),	/* only used when adding events */
 	EP_MODE_EDGE     = (1 << 9),	/* only used when adding events */
