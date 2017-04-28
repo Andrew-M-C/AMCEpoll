@@ -146,7 +146,6 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 
 					if (0 == (amcEvent->events & EP_MODE_PERSIST)) {
 						epEventFd_DetachFromBase(base, amcEvent);
-						epEventFd_Destroy(amcEvent);
 						amcEvent = NULL;
 					}
 				}

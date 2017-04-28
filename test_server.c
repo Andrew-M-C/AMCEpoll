@@ -157,6 +157,11 @@ static int _create_signal_handler(struct AMCEpoll *base)
 /* ------------------------------------------- */
 static void _general_test()
 {
+	int tmp;
+	for (tmp = 0; tmp < 256; tmp++)
+	{
+		_LOG("[%03d] %s", tmp, strsignal(tmp));
+	}
 	return;
 }
 

@@ -43,7 +43,7 @@ struct AMCEpollEvent {
 	int            fd;
 	ev_callback    callback;
 	void          *user_data;
-	void          *inter_data;
+	uint8_t        inter_data[64];		/* internal data, reserved for different types of events */
 	int            epoll_events;
 	events_t       events;
 	detach_func    detach_func;
@@ -60,6 +60,7 @@ struct AMCEpoll {
 
 /* constants */
 #define EVENT_KEY_LEN_MAX	(32)
+#define SIGNAL_NUM_MAX		(64)
 
 /* tools */
 #define BITS_ANY_SET(val, bits)		(0 != ((val) & (bits)))

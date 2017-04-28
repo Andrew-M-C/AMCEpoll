@@ -55,7 +55,7 @@ struct AMCEpollEvent *epCommon_NewEmptyEvent()
 		newEvent->fd = -1;
 		newEvent->callback = NULL;
 		newEvent->user_data = NULL;
-		newEvent->inter_data = NULL;
+		newEvent->inter_data[0] = 0;
 		newEvent->epoll_events = 0;
 		newEvent->events = 0;
 		newEvent->detach_func = NULL;

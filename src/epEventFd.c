@@ -245,7 +245,6 @@ struct AMCEpollEvent *epEventFd_Create(int fd, events_t events, int timeout, ev_
 	newEvent->fd = fd;
 	newEvent->callback = callback;
 	newEvent->user_data = userData;
-	newEvent->inter_data = NULL;
 	newEvent->epoll_events = _epoll_code_from_amc_code(events);
 	newEvent->events = events;
 	newEvent->detach_func = epEventFd_DetachFromBase;
