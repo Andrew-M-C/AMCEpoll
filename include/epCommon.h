@@ -30,15 +30,22 @@
 /* headers */
 #include <stdint.h>
 #include <unistd.h>
+#include <errno.h>
 #include <sys/epoll.h>
 
 #include "cAssocArray.h"
 #include "AMCEpoll.h"
 
+/* constants */
+#define EVENT_KEY_LEN_MAX	(32)
+#define SIGNAL_NUM_MAX		(64)
+#define INTERNAL_DATA_LEN	(64)
+
 /* data structures */
+struct AMCEpollEvent;
 typedef struct epoll_event epoll_event_st;
 typedef int (*free_func)(struct AMCEpollEvent *event);
-typedef int (*getkey_func)(struct AMCEpollEvent *event);
+typedef int (*genkey_func)(struct AMCEpollEvent *event, char *keyBuff, size_t nBuffLen);
 typedef int (*attach_func)(struct AMCEpoll *base, struct AMCEpollEvent *event);
 typedef int (*detach_func)(struct AMCEpoll *base, struct AMCEpollEvent *event);
 typedef int (*invoke_func)(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent);
@@ -47,11 +54,12 @@ struct AMCEpollEvent {
 	int            fd;
 	ev_callback    callback;
 	void          *user_data;
-	uint8_t        inter_data[64];		/* internal data, reserved for different types of events */
+	char           key[EVENT_KEY_LEN_MAX];
+	uint8_t        inter_data[INTERNAL_DATA_LEN];		/* internal data, reserved for different types of events */
 	int            epoll_events;
 	events_t       events;
 	free_func      free_func;
-	getkey_func    getkey_func;
+	genkey_func    genkey_func;
 	attach_func    attach_func;
 	detach_func    detach_func;
 	invoke_func    invoke_func;
@@ -66,15 +74,25 @@ struct AMCEpoll {
 	epoll_event_st  epoll_buff[0];
 };
 
-/* constants */
-#define EVENT_KEY_LEN_MAX	(32)
-#define SIGNAL_NUM_MAX		(64)
-
 /* tools */
 #define BITS_ANY_SET(val, bits)		(0 != ((val) & (bits)))
 #define BITS_ALL_SET(val, bits)		(bits == ((val) & (bits)))
 #define BITS_HAVE_INTRSET(bitA, bitB)	((bitA) != ((bitA) & (~(bitB))))		/* The two bits have intersetion */
 
+#define RETURN_ERR(err)	\
+	do{\
+		if (err > 0) {\
+			errno = err;\
+			return (0 - err);\
+		} else if (err < 0) {\
+			errno = 0 - err;\
+			return err;\
+		} else {\
+			return -1;\
+		}\
+	}while(0)
+
+// TODO: deprecated
 /* common interfaces */
 struct AMCEpollEvent *
 	epCommon_NewEmptyEvent(void);

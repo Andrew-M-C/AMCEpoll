@@ -33,6 +33,8 @@
 #include "utilLog.h"
 #include "cAssocArray.h"
 
+#include <string.h>
+#include <stdlib.h>
 
 #endif
 
@@ -43,7 +45,75 @@
 
 /* --------------------epEventIntnl_NewEmptyEvent----------------------- */
 struct AMCEpollEvent *epEventIntnl_NewEmptyEvent()
-{}
+{
+	struct AMCEpollEvent *newEvent = NULL;
+	
+	newEvent= malloc(sizeof(*newEvent));
+	if (NULL == newEvent) {
+		CRIT("Failed to allocate a new event: %s", strerror(errno));
+	} else {
+		memset(newEvent, 0, sizeof(*newEvent));
+		newEvent->fd = -1;
+	}
+	
+	return newEvent;
+}
+
+
+/* --------------------epEventIntnl_FreeEmptyEvent----------------------- */
+int epEventIntnl_FreeEmptyEvent(struct AMCEpollEvent *event)
+{
+	free(event);
+	return 0;
+}
+
+
+/* --------------------epEventIntnl_AttachToBase----------------------- */
+int epEventIntnl_AttachToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
+{
+	if (NULL == base) {
+		RETURN_ERR(EINVAL);
+	} else if (NULL == event) {
+		RETURN_ERR(EINVAL);
+	} else if ('\0' == event->key[0]) {
+		RETURN_ERR(EBADF);
+	} else {
+		int callStat = cAssocArray_AddValue(base->all_events, event->key, event);
+		if (callStat < 0) {
+			return (0 - errno);
+		} else {
+			return 0;
+		}
+	}
+}
+
+
+/* --------------------epEventIntnl_DetachFromBase----------------------- */
+int epEventIntnl_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
+{
+	if (NULL == base) {
+		RETURN_ERR(EINVAL);
+	} else if (NULL == event) {
+		RETURN_ERR(EINVAL);
+	} else if ('\0' == event->key[0]) {
+		RETURN_ERR(EBADF);
+	} 
+	else {
+		struct AMCEpollEvent *eventInBase = cAssocArray_GetValue(base->all_events, event->key);
+
+		if (eventInBase == event) {
+			int callStat = cAssocArray_RemoveValue(base->all_events, event->key, FALSE);
+			if (callStat < 0) {
+				return (0 - errno);
+			} else {
+				return 0;
+			}
+		}
+		else {
+			RETURN_ERR(ENOENT);
+		}
+	}
+}
 
 
 #endif
@@ -52,6 +122,96 @@ struct AMCEpollEvent *epEventIntnl_NewEmptyEvent()
 /********/
 #define __PUBLIC_INTERFACES
 #ifdef __PUBLIC_INTERFACES
+
+/* --------------------epEvent_New----------------------- */
+struct AMCEpollEvent *epEvent_New(events_t what)
+{
+	struct AMCEpollEvent *newEvent = NULL;
+
+	// TODO:
+	return newEvent;
+}
+
+
+/* --------------------epEvent_Free----------------------- */
+int epEvent_Free(struct AMCEpollEvent *event)
+{
+	if (NULL == event) {
+		RETURN_ERR(EINVAL);
+	}
+	else if (NULL == event->free_func) {
+		CRIT("Event %p not init correctly", event);
+		RETURN_ERR(EBADF);
+	}
+	else {
+		return (event->free_func)(event);
+	}
+}
+
+
+/* --------------------epEvent_GetKey----------------------- */
+const char * epEvent_GetKey(struct AMCEpollEvent *event)
+{
+	if (NULL == event) {
+		errno = EINVAL;
+		return NULL;
+	}
+	else if ('\0' == event->key) {
+		errno = EBADF;
+		return NULL;
+	}
+	else {
+		return event->key;
+	}
+}
+
+
+/* --------------------epEvent_AddToBase----------------------- */
+int epEvent_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
+{
+	if (NULL == base) {
+		RETURN_ERR(EINVAL);
+	} else if (NULL == event) {
+		RETURN_ERR(EINVAL);
+	} else if ('\0' == event->attach_func) {
+		RETURN_ERR(EBADF);
+	} else {
+		return (event->attach_func)(base, event);
+	}
+}
+
+
+/* --------------------epEvent_DelFromBase----------------------- */
+int epEvent_DelFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
+{
+	if (NULL == base) {
+		RETURN_ERR(EINVAL);
+	} else if (NULL == event) {
+		RETURN_ERR(EINVAL);
+	} else if ('\0' == event->detach_func) {
+		RETURN_ERR(EBADF);
+	} else {
+		return (event->detach_func)(base, event);
+	}
+}
+
+
+/* --------------------epEvent_InvokeCallback----------------------- */
+int epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvents)
+{
+	if (0 == epollEvents) {
+		ERROR("Empty event for %p", event);
+		RETURN_ERR(EINVAL);
+	} else if (NULL == base) {
+		RETURN_ERR(EINVAL);
+	} else if (NULL == event) {
+		RETURN_ERR(EINVAL);
+	} else if ('\0' == event->invoke_func) {
+		RETURN_ERR(EBADF);
+	} else {
+		return (event->invoke_func)(base, event, epollEvents);
+	}
+}
 
 
 

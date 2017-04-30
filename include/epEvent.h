@@ -30,38 +30,33 @@
 #define __EP_EVENT_H__
 
 /* headers */
-#include <stdint.h>
-#include <unistd.h>
-#include <sys/epoll.h>
-
 #include "epCommon.h"
-#include "cAssocArray.h"
 #include "AMCEpoll.h"
 
 /* Internal Class Functions */
 struct AMCEpollEvent *
 	epEventIntnl_NewEmptyEvent(void);
 int 
-	epEventIntnl_FreeEmptyEvent(AMCEpollEvent *event);
+	epEventIntnl_FreeEmptyEvent(struct AMCEpollEvent *event);
 int 
-	epEventIntnl_AttachToBase(AMCEpoll *base, AMCEpollEvent *event);
+	epEventIntnl_AttachToBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
-	epEventIntnl_DetachFromBase(AMCEpoll *base, AMCEpollEvent *event);
+	epEventIntnl_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
 
 
 /* Public Class Functions */
 struct AMCEpollEvent *
 	epEvent_New(events_t what);
 int 
-	epEvent_Free(AMCEpollEvent *event);
+	epEvent_Free(struct AMCEpollEvent *event);
+const char * 
+	epEvent_GetKeystruct (struct AMCEpollEvent *event);
 int 
-	epEvent_GetKey(AMCEpollEvent *event);
+	epEvent_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
-	epEvent_AddToBase(AMCEpoll *base, AMCEpollEvent *event);
+	epEvent_DelFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
-	epEvent_DelFromBase(AMCEpoll *base, AMCEpollEvent *event);
-int 
-	epEvent_InvokeCallback(AMCEpoll *base, AMCEpollEvent *event, int epollEvents);
+	epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvents);
 
 #endif
 /* EOF */
