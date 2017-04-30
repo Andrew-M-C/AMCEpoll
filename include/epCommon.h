@@ -37,7 +37,11 @@
 
 /* data structures */
 typedef struct epoll_event epoll_event_st;
+typedef int (*free_func)(struct AMCEpollEvent *event);
+typedef int (*getkey_func)(struct AMCEpollEvent *event);
+typedef int (*attach_func)(struct AMCEpoll *base, struct AMCEpollEvent *event);
 typedef int (*detach_func)(struct AMCEpoll *base, struct AMCEpollEvent *event);
+typedef int (*invoke_func)(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent);
 
 struct AMCEpollEvent {
 	int            fd;
@@ -46,7 +50,11 @@ struct AMCEpollEvent {
 	uint8_t        inter_data[64];		/* internal data, reserved for different types of events */
 	int            epoll_events;
 	events_t       events;
+	free_func      free_func;
+	getkey_func    getkey_func;
+	attach_func    attach_func;
 	detach_func    detach_func;
+	invoke_func    invoke_func;
 };
 
 
