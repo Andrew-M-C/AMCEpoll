@@ -48,8 +48,6 @@
 		}\
 	}while(0)
 
-
-
 int epEventFd_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int epEventFd_GenKey(struct AMCEpollEvent *event, char *keyOut, size_t nBuffLen);
 int epEventFd_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
@@ -278,6 +276,7 @@ struct AMCEpollEvent *epEventFd_Create(int fd, events_t events, int timeout, ev_
 	newEvent->attach_func = epEventFd_AddToBase;
 	newEvent->detach_func = epEventFd_DetachFromBase;
 	newEvent->invoke_func = epEventFd_InvokeCallback;
+	_snprintf_fd_key(newEvent, newEvent->key, sizeof(newEvent->key));
 
 ENDS:
 	return newEvent;
@@ -292,10 +291,7 @@ int epEventFd_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 		_RETURN_ERR(EINVAL);
 	}
 	else {
-		struct AMCEpollEvent *oldEvent = NULL;
-
-		_snprintf_fd_key(event, event->key, sizeof(event->key));
-		oldEvent = epCommon_GetEvent(base, event->key);
+		struct AMCEpollEvent *oldEvent = epCommon_GetEvent(base, event->key);
 
 		/* add a new event */
 		if (NULL == oldEvent) {
@@ -404,6 +400,7 @@ int epEventFd_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event,
 		RETURN_ERR(EINVAL);
 	}
 }
+
 
 #endif
 /* EOF */

@@ -31,7 +31,7 @@
 #include <errno.h>
 
 struct AMCEpollEvent *
-	epEventFd_Create(int fd, uint16_t events, int timeout, ev_callback callback, void *userData);
+	epEventFd_Create(int fd, events_t events, int timeout, ev_callback callback, void *userData);
 BOOL 
 	epEventFd_IsFileEvent(events_t what);
 

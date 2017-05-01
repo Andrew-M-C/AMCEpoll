@@ -140,6 +140,10 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 
 				if (amcEvent) {
 					epEvent_InvokeCallback(base, amcEvent, epollWhat);
+
+					if (FALSE == BITS_ANY_SET(amcEvent->events, EP_MODE_PERSIST)) {
+						epEvent_DelFromBase(base, amcEvent);
+					}
 				}
 			}
 			// end of "for (nIndex = 0; nIndex < nTotal; nIndex ++)"
@@ -278,8 +282,8 @@ int AMCEpoll_Free(struct AMCEpoll *base)
 }
 
 
-/* --------------------AMCEpoll_NewFileEvent----------------------- */
-struct AMCEpollEvent *AMCEpoll_NewFileEvent(int fd, events_t events, int timeout, ev_callback callback, void *userData)
+/* --------------------AMCEpoll_NewEvent----------------------- */
+struct AMCEpollEvent *AMCEpoll_NewEvent(int fd, events_t events, int timeout, ev_callback callback, void *userData)
 {
 	return epEvent_New(fd, events, timeout, callback, userData);
 }

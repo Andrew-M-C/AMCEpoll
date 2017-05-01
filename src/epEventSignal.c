@@ -28,6 +28,7 @@
 #define __HEADERS_AND_MACROS
 #ifdef __HEADERS_AND_MACROS
 
+#include "epEvent.h"
 #include "epEventSignal.h"
 #include "utilLog.h"
 #include "AMCEpoll.h"
@@ -56,6 +57,11 @@
 #define _SIG_EVENT_UNLOCK()		do{pthread_mutex_unlock(&_signal_lock);}while(0)
 
 static int _signal_epoll_code_from_amc_code(events_t amcCode);
+static int epEventSignal_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
+static int epEventSignal_GenKey(struct AMCEpollEvent *event, char *keyOut, size_t nBuffLen);
+static int epEventSignal_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
+static int epEventSignal_Destroy(struct AMCEpollEvent *event);
+static int epEventSignal_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent);
 
 #endif
 
@@ -371,6 +377,20 @@ static int _signal_epoll_code_from_amc_code(events_t amcCode)
 }
 
 
+/* --------------------_amc_code_from_signal_epoll_code----------------------- */
+static events_t _amc_code_from_signal_epoll_code(int epollCode)
+{
+	events_t ret = 0;
+	if (BITS_ANY_SET(epollCode, EPOLLERR | EPOLLHUP)) {
+		ret |= EP_EVENT_ERROR;
+	}
+	else {
+		ret |= EP_EVENT_SIGNAL;
+	}
+	return ret;
+}
+
+
 /* --------------------_add_signal_event_LOCKED----------------------- */
 static int _add_signal_event_LOCKED(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
@@ -477,37 +497,36 @@ struct AMCEpollEvent *epEventSignal_Create(int sig, events_t events, int timeout
 	newEvent->user_data = userData;
 	newEvent->epoll_events = _signal_epoll_code_from_amc_code(events);
 	newEvent->events = events;
+	newEvent->free_func = epEventSignal_Destroy;
+	newEvent->genkey_func = epEventSignal_GenKey;
+	newEvent->attach_func = epEventSignal_AddToBase;
 	newEvent->detach_func = epEventSignal_DetachFromBase;
+	newEvent->invoke_func = epEventSignal_InvokeCallback;
+	_snprintf_signal_key(newEvent, newEvent->key, sizeof(newEvent->key));
 
 	return newEvent;
 }
 
 
-/* --------------------epEventFd_AddToBase----------------------- */
-int epEventSignal_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
+/* --------------------epEventSignal_AddToBase----------------------- */
+static int epEventSignal_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
 	if ((NULL == base) || (NULL == event)) {
 		ERROR("Invalid parameter");
 		_RETURN_ERR(EINVAL);
 	}
-	else if (FALSE == epEventSignal_TypeMatch(event)) {
-		ERROR("Not signal event");
-		_RETURN_ERR(EINVAL);
-	}
 	else {
-		char key[EVENT_KEY_LEN_MAX] = "";
-		struct AMCEpollEvent *oldEvent = NULL;
-
-		_snprintf_signal_key(event, key, sizeof(key));
-		oldEvent = epCommon_GetEvent(base, key);
+		struct AMCEpollEvent *oldEvent = epCommon_GetEvent(base, event->key);
 
 		/* add a new event */
 		if (NULL == oldEvent) {
 			return _add_signal_event_LOCKED(base, event);
 		}
+		/* update event */
 		else if (oldEvent == event) {
 			return _mod_signal_event_LOCKED(base, event);
 		}
+		/* event duplicated */
 		else {
 			ERROR("Event for signal %d already existed", event->fd);
 			_RETURN_ERR(EEXIST);
@@ -516,33 +535,20 @@ int epEventSignal_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 }
 
 
-/* --------------------epEventSignal_TypeMatch----------------------- */
-BOOL epEventSignal_TypeMatch(struct AMCEpollEvent *event)
+/* --------------------epEventSignal_IsSignalEvent----------------------- */
+BOOL epEventSignal_IsSignalEvent(events_t what)
 {
-	if (NULL == event) {
-		return FALSE;
-	} else if (0 == (event->events & EP_EVENT_SIGNAL)) {
-		return FALSE;
-	} else if (event->fd < 0) {
-		return FALSE;
-	} else {
-		return TRUE;
-	}
+	return BITS_ANY_SET(what, EP_EVENT_SIGNAL);
 }
 
 
 /* --------------------epEventSignal_GenKey----------------------- */
-int epEventSignal_GenKey(struct AMCEpollEvent *event, char *keyOut, size_t nBuffLen)
+static int epEventSignal_GenKey(struct AMCEpollEvent *event, char *keyOut, size_t nBuffLen)
 {
 	if (event && keyOut && nBuffLen) {
 		/* OK */
 	} else {
 		ERROR("Invalid parameter");
-		_RETURN_ERR(EINVAL);
-	}
-
-	if (FALSE == epEventSignal_TypeMatch(event)) {
-		ERROR("Not signal event");
 		_RETURN_ERR(EINVAL);
 	}
 
@@ -552,22 +558,42 @@ int epEventSignal_GenKey(struct AMCEpollEvent *event, char *keyOut, size_t nBuff
 
 
 /* --------------------epEventSignal_DetachFromBase----------------------- */
-int epEventSignal_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
+static int epEventSignal_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
+	// TODO:
 	return -1;
 }
 
 
 /* --------------------epEventSignal_Destroy----------------------- */
-int epEventSignal_Destroy(struct AMCEpollEvent *event)
+static int epEventSignal_Destroy(struct AMCEpollEvent *event)
 {
-	if (FALSE == epEventSignal_TypeMatch(event)) {
+	if (NULL == event) {
 		_RETURN_ERR(EINVAL);
 	} else {
 		epCommon_InvokeCallback(event, event->fd, EP_EVENT_FREE);
 		return epCommon_FreeEmptyEvent(event);
 	}
 }
+
+
+/* --------------------epEventSignal_InvokeCallback----------------------- */
+static int epEventSignal_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent)
+{
+	events_t userWhat = 0;
+	if (base && event && epollEvent)
+	{
+		userWhat = _amc_code_from_signal_epoll_code(epollEvent);
+		if (BITS_HAVE_INTRSET(userWhat, event->events)) {
+			epEventIntnl_InvokeUserCallback(event, event->fd, userWhat);
+		}
+		return 0;
+	}
+	else {
+		RETURN_ERR(EINVAL);
+	}
+}
+
 
 #endif
 /* EOF */

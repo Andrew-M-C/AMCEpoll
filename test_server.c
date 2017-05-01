@@ -126,7 +126,7 @@ static int _create_signal_handler(struct AMCEpoll *base)
 
 	signal(SIGQUIT, _sigquit_handler);
 
-	signalEvent = AMCEpoll_NewFileEvent(g_signal_pipe[PIPE_READ], 
+	signalEvent = AMCEpoll_NewEvent(g_signal_pipe[PIPE_READ], 
 								EP_EVENT_READ | EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_FREE, 
 								0, _callback_signal_read, base);
 
@@ -157,11 +157,6 @@ static int _create_signal_handler(struct AMCEpoll *base)
 /* ------------------------------------------- */
 static void _general_test()
 {
-	int tmp;
-	for (tmp = 0; tmp < 256; tmp++)
-	{
-		_LOG("[%03d] %s", tmp, strsignal(tmp));
-	}
 	return;
 }
 
@@ -439,7 +434,7 @@ static void _callback_accept(struct AMCEpollEvent *theEvent, int fd, events_t ev
 		}
 
 		if (isOK) {
-			struct AMCEpollEvent *newEvent= AMCEpoll_NewFileEvent(newFd, 
+			struct AMCEpollEvent *newEvent= AMCEpoll_NewEvent(newFd, 
 										EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_MODE_PERSIST, 
 										0, _callback_read, base);
 			if (NULL == newEvent) {
@@ -515,7 +510,7 @@ int _create_local_server(struct AMCEpoll *base)
 		goto ERROR;
 	}
 
-	acceptEvent = AMCEpoll_NewFileEvent(fd, 
+	acceptEvent = AMCEpoll_NewEvent(fd, 
 					EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_EVENT_TIMEOUT, 
 					0, _callback_accept, base);
 	if (NULL == acceptEvent) {

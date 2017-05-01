@@ -31,17 +31,9 @@
 #include <errno.h>
 
 struct AMCEpollEvent *
-	epEventSignal_Create(int sig, uint16_t events, int timeout, ev_callback callback, void *userData);
-int 
-	epEventSignal_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
+	epEventSignal_Create(int sig, events_t events, int timeout, ev_callback callback, void *userData);
 BOOL 
-	epEventSignal_TypeMatch(struct AMCEpollEvent *event);
-int 
-	epEventSignal_GenKey(struct AMCEpollEvent *event, char *keyOut, size_t nBuffLen);
-int 
-	epEventSignal_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
-int 
-	epEventSignal_Destroy(struct AMCEpollEvent *event);
+	epEventSignal_IsSignalEvent(events_t what);
 
 
 #endif

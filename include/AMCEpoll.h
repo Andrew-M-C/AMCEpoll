@@ -78,7 +78,7 @@ struct AMCEpoll *
 int
 	AMCEpoll_Free(struct AMCEpoll *base);
 struct AMCEpollEvent *
-	AMCEpoll_NewFileEvent(int fd, events_t events, int timeout, ev_callback callback, void *userData);
+	AMCEpoll_NewEvent(int fd, events_t events, int timeout, ev_callback callback, void *userData);
 int 
 	AMCEpoll_FreeEvent(struct AMCEpollEvent *event);
 int 
