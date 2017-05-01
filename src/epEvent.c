@@ -147,6 +147,17 @@ int epEventIntnl_InvokeUserFreeCallback(struct AMCEpollEvent *event, int handler
 }
 
 
+/* --------------------epEventIntnl_GetEvent----------------------- */
+struct AMCEpollEvent *epEventIntnl_GetEvent(struct AMCEpoll *base, const char *key)
+{
+	if (base && key) {
+		return cAssocArray_GetValue(base->all_events, key);
+	} else {
+		return NULL;
+	}
+}
+
+
 #endif
 
 

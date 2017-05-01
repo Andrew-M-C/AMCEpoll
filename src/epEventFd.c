@@ -344,12 +344,8 @@ int epEventFd_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 	else
 	{
 		int callStat = 0;
-		char key[EVENT_KEY_LEN_MAX];
 		struct AMCEpollEvent *eventInBase = NULL;
-
-		_snprintf_fd_key(event, key, sizeof(key));
-
-		eventInBase = epCommon_GetEvent(base, key);
+		eventInBase = epCommon_GetEvent(base, event->key);
 		if (eventInBase != event) {
 			ERROR("Event %p is not menber of Base %p", event, base);
 			_RETURN_ERR(ENOENT);
@@ -362,11 +358,7 @@ int epEventFd_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 			_RETURN_ERR(err);
 		}
 
-		if (epCommon_DetachEvent(base, key)) {
-			return 0;
-		} else {
-			_RETURN_ERR(errno);
-		}
+		return epEventIntnl_DetachFromBase(base, event);
 	}
 }
 

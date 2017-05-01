@@ -128,7 +128,24 @@ static int _epoll_signal_mod(struct AMCEpoll *base, struct AMCEpollEvent *amcEve
 		return 0;
 	} else {
 		int err = errno;
-		ERROR("Failed in epoll_add(): %s", strerror(err));
+		ERROR("Failed in epoll_mod(): %s", strerror(err));
+		_RETURN_ERR(err);
+	}
+}
+
+
+/* --------------------_epoll_signal_del----------------------- */
+static int _epoll_signal_del(struct AMCEpoll *base, struct AMCEpollEvent *amcEvent)
+{
+	int callStat = 0;
+	struct EpSigPipe *sigPipe = (struct EpSigPipe *)(amcEvent->inter_data);
+
+	callStat = epoll_ctl(base->epoll_fd, EPOLL_CTL_DEL, sigPipe->fd[PIPE_READ], NULL);
+	if (0 == callStat) {
+		return 0;
+	} else {
+		int err = errno;
+		ERROR("Failed in epoll_del(): %s", strerror(err));
 		_RETURN_ERR(err);
 	}
 }
@@ -395,12 +412,7 @@ static events_t _amc_code_from_signal_epoll_code(int epollCode)
 static int _add_signal_event_LOCKED(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
 	int callStat = 0;
-	char key[EVENT_KEY_LEN_MAX];
-
-	_snprintf_signal_key(event, key, sizeof(key));
-	DEBUG("Add new signal %d (%s)", event->fd, strsignal(event->fd));
-
-	callStat = epCommon_AddEvent(base, event, key);
+	callStat = epCommon_AddEvent(base, event, event->key);
 	if (callStat < 0) {
 		ERROR("Failed to add signal event %d: %s", event->fd, strerror(errno));
 		goto FAILED;
@@ -413,8 +425,12 @@ static int _add_signal_event_LOCKED(struct AMCEpoll *base, struct AMCEpollEvent 
 	}
 
 	callStat = _epoll_signal_add(base, event);
-	if (callStat < 0) {
+	if (callStat < 0)
+	{
+		int err = errno;
+		_epoll_signal_del(base, event);
 		_signal_del_LOCKED(event);
+		errno = err;
 		ERROR("Failed to add signal: %s", strerror(errno));
 		goto FAILED;
 	}
@@ -429,9 +445,6 @@ FAILED:
 static int _mod_signal_event_LOCKED(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
 	int callStat = 0;
-	char key[EVENT_KEY_LEN_MAX];
-
-	_snprintf_signal_key(event, key, sizeof(key));
 	DEBUG("Add new signal %d (%s)", event->fd, strsignal(event->fd));
 
 	callStat = _signal_re_add_LOCKED(event);
@@ -449,6 +462,23 @@ static int _mod_signal_event_LOCKED(struct AMCEpoll *base, struct AMCEpollEvent 
 
 	return 0;
 FAILED:
+	return callStat;
+}
+
+
+/* --------------------_del_signal_event_LOCKED----------------------- */
+static int _del_signal_event_LOCKED(struct AMCEpoll *base, struct AMCEpollEvent *event)
+{
+	int callStat = 0;
+
+	callStat = _signal_del_LOCKED(event);
+	if (callStat < 0) {
+		ERROR("Failed to delete signal event %d: %s", event->fd, strerror(errno));
+		return callStat;
+	}
+
+	_epoll_signal_del(base, event);
+	callStat = _signal_del_LOCKED(event);
 	return callStat;
 }
 
@@ -560,7 +590,28 @@ static int epEventSignal_GenKey(struct AMCEpollEvent *event, char *keyOut, size_
 /* --------------------epEventSignal_DetachFromBase----------------------- */
 static int epEventSignal_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
-	// TODO:
+	if ((NULL == base) || (NULL == event)) {
+		ERROR("Invalid parameter");
+		_RETURN_ERR(EINVAL);
+	}
+	else {
+		int callStat = 0;
+		struct AMCEpollEvent *eventInBase = NULL;
+
+		eventInBase = epEventIntnl_GetEvent(base, event->key);
+		if (eventInBase != event) {
+			ERROR("Event %p is not menber of Base %p", event, base);
+			_RETURN_ERR(ENOENT);
+		}
+
+		callStat = _del_signal_event_LOCKED(base, event);
+		if (callStat < 0) {
+			ERROR("Failed to del event in epoll_ctl(): %s", strerror(errno));
+			return callStat;
+		}
+
+		return epEventIntnl_DetachFromBase(base, event);
+	}
 	return -1;
 }
 

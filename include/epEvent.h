@@ -46,6 +46,8 @@ int
 	epEventIntnl_InvokeUserCallback(struct AMCEpollEvent *event, int handler, events_t what);
 int 
 	epEventIntnl_InvokeUserFreeCallback(struct AMCEpollEvent *event, int handler);
+struct AMCEpollEvent *
+	epEventIntnl_GetEvent(struct AMCEpoll *base, const char *key);
 
 
 /* Public Class Functions */
@@ -54,7 +56,7 @@ struct AMCEpollEvent *
 int 
 	epEvent_Free(struct AMCEpollEvent *event);
 const char * 
-	epEvent_GetKeystruct (struct AMCEpollEvent *event);
+	epEvent_GetKey(struct AMCEpollEvent *event);
 int 
 	epEvent_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
