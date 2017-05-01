@@ -28,6 +28,8 @@
 #define __HEADERS_AND_MACROS
 #ifdef __HEADERS_AND_MACROS
 
+#include "epEventFd.h"
+
 #include "epCommon.h"
 #include "epEvent.h"
 #include "utilLog.h"
@@ -116,6 +118,35 @@ int epEventIntnl_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *eve
 }
 
 
+/* --------------------epEventIntnl_InvokeUserCallback----------------------- */
+int epEventIntnl_InvokeUserCallback(struct AMCEpollEvent *event, int handler, events_t what)
+{
+	if (NULL == event) {
+		RETURN_ERR(EINVAL);
+	} else if (NULL == event->callback) {
+		RETURN_ERR(EBADF);
+	} else {
+		(event->callback)(event, handler, what, event->user_data);
+		return 0;
+	}
+}
+
+
+/* --------------------epEventIntnl_InvokeUserCallback----------------------- */
+int epEventIntnl_InvokeUserFreeCallback(struct AMCEpollEvent *event, int handler)
+{
+	if (event && event->callback) {
+		if (BITS_HAVE_INTRSET(event->events, EP_EVENT_FREE)) {
+			(event->callback)(event, handler, EP_EVENT_FREE, event->user_data);
+		}
+		return 0;
+	}
+	else {
+		RETURN_ERR(EINVAL);
+	}
+}
+
+
 #endif
 
 
@@ -124,12 +155,16 @@ int epEventIntnl_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *eve
 #ifdef __PUBLIC_INTERFACES
 
 /* --------------------epEvent_New----------------------- */
-struct AMCEpollEvent *epEvent_New(events_t what)
+struct AMCEpollEvent *epEvent_New(int fd, events_t what, int timeout, ev_callback callback, void *userData)
 {
-	struct AMCEpollEvent *newEvent = NULL;
-
+	if (epEventFd_IsFileEvent(what)) {
+		return epEventFd_Create(fd, what, timeout, callback, userData);
+	}
 	// TODO:
-	return newEvent;
+	else {
+		errno = EINVAL;
+		return NULL;
+	}
 }
 
 

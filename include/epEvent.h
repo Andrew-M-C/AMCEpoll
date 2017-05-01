@@ -42,11 +42,15 @@ int
 	epEventIntnl_AttachToBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
 	epEventIntnl_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
+int 
+	epEventIntnl_InvokeUserCallback(struct AMCEpollEvent *event, int handler, events_t what);
+int 
+	epEventIntnl_InvokeUserFreeCallback(struct AMCEpollEvent *event, int handler);
 
 
 /* Public Class Functions */
 struct AMCEpollEvent *
-	epEvent_New(events_t what);
+	epEvent_New(int fd, events_t what, int timeout, ev_callback callback, void *userData);
 int 
 	epEvent_Free(struct AMCEpollEvent *event);
 const char * 

@@ -32,17 +32,8 @@
 
 struct AMCEpollEvent *
 	epEventFd_Create(int fd, uint16_t events, int timeout, ev_callback callback, void *userData);
-int 
-	epEventFd_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
 BOOL 
-	epEventFd_TypeMatch(struct AMCEpollEvent *event);
-int 
-	epEventFd_GenKey(struct AMCEpollEvent *event, char *keyOut, size_t nBuffLen);
-int 
-	epEventFd_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
-int 
-	epEventFd_Destroy(struct AMCEpollEvent *event);
-
+	epEventFd_IsFileEvent(events_t what);
 
 #endif
 /* EOF */

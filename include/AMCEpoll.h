@@ -88,9 +88,9 @@ int
 int 
 	AMCEpoll_DelAndFreeEvent(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
-	AMCEpoll_Dispatch(struct AMCEpoll *obj);
+	AMCEpoll_Dispatch(struct AMCEpoll *base);
 int 
-	AMCEpoll_LoopExit(struct AMCEpoll *obj);
+	AMCEpoll_LoopExit(struct AMCEpoll *base);
 int 
 	AMCFd_MakeNonBlock(int fd);
 int 

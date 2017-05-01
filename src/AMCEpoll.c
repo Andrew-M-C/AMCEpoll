@@ -29,8 +29,7 @@
 #ifdef __HEADERS
 
 #include "epCommon.h"
-#include "epEventFd.h"
-#include "epEventSignal.h"
+#include "epEvent.h"
 #include "utilLog.h"
 #include "AMCEpoll.h"
 #include "cAssocArray.h"
@@ -139,17 +138,11 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 				epollWhat = evBuff[nIndex].events;
 				amcEvent = (struct AMCEpollEvent *)(evBuff[nIndex].data.ptr);
 
-				if (amcEvent)
-				{
-					events_t amcWhat = epCommon_EventCodeEpollToAmc(epollWhat);
-					epCommon_InvokeCallback(amcEvent, amcEvent->fd, amcWhat);
-
-					if (0 == (amcEvent->events & EP_MODE_PERSIST)) {
-						epEventFd_DetachFromBase(base, amcEvent);
-						amcEvent = NULL;
-					}
+				if (amcEvent) {
+					epEvent_InvokeCallback(base, amcEvent, epollWhat);
 				}
 			}
+			// end of "for (nIndex = 0; nIndex < nTotal; nIndex ++)"
 		}
 		// end of "else (nTotal < 0) {..."
 
@@ -288,82 +281,28 @@ int AMCEpoll_Free(struct AMCEpoll *base)
 /* --------------------AMCEpoll_NewFileEvent----------------------- */
 struct AMCEpollEvent *AMCEpoll_NewFileEvent(int fd, events_t events, int timeout, ev_callback callback, void *userData)
 {
-	struct AMCEpollEvent *newEvent = NULL;
-
-	if (epCommon_IsSignalEvent(events)) {
-		// TODO:
-		return NULL;
-	}
-	else if (epCommon_IsTimeoutEvent(events)) {
-		// TODO:
-		return NULL;
-	}
-	else if (epCommon_IsFileEvent(events)) {
-		newEvent = epEventFd_Create(fd, events, timeout, callback, userData);
-		return newEvent;
-	}
-	else {
-		ERROR("Illegal event request: 0x%04lx", (long)events);
-		return NULL;
-	}
+	return epEvent_New(fd, events, timeout, callback, userData);
 }
 
 
 /* --------------------AMCEpoll_FreeEvent----------------------- */
 int AMCEpoll_FreeEvent(struct AMCEpollEvent *event)
 {
-	if (NULL == event) {
-		_RETURN_ERR(EINVAL);
-	}
-	else if (epEventFd_TypeMatch(event)) {
-		return epEventFd_Destroy(event);
-	}
-	else if (epEventSignal_TypeMatch(event)) {
-		return epEventSignal_Destroy(event);
-	}
-	else {
-		ERROR("Unknown event type: 0x%04lx", event->events);
-		_RETURN_ERR(EINVAL);
-	}
+	return epEvent_Free(event);
 }
 
 
 /* --------------------AMCEpoll_AddEvent----------------------- */
 int AMCEpoll_AddEvent(struct AMCEpoll * base, struct AMCEpollEvent * event)
 {
-	if ((NULL == base) || (NULL == event)) {
-		ERROR("Invalid parameter in AMCEpoll_AddEvent()");
-		_RETURN_ERR(EINVAL);
-	}
-	else if (epEventFd_TypeMatch(event)) {
-		return epEventFd_AddToBase(base, event);
-	}
-	else {
-		// TODO:
-		ERROR("Unknown event type 0x%04lx", event->events);
-		_RETURN_ERR(EINVAL);
-	}
+	return epEvent_AddToBase(base, event);
 }
 
 
 /* --------------------AMCEpoll_DelEvent----------------------- */
 int AMCEpoll_DelEvent(struct AMCEpoll * base, struct AMCEpollEvent * event)
 {
-	int callStat = 0;
-
-	if ((NULL == base) || (NULL == event)) {
-		ERROR("Invalid parameter in AMCEpoll_DelEvent()");
-		_RETURN_ERR(EINVAL);
-	}
-	else if (event->detach_func) {
-		callStat = (event->detach_func)(base, event);
-		return callStat;
-	}
-	else {
-		// TODO:
-		ERROR("Unknown event type 0x%04lx", event->events);
-		_RETURN_ERR(EINVAL);
-	}
+	return epEvent_DelFromBase(base, event);
 }
 
 
@@ -381,30 +320,30 @@ int AMCEpoll_DelAndFreeEvent(struct AMCEpoll *base, struct AMCEpollEvent *event)
 }
 
 
-/* --------------------AMCEpoll_DelEvent----------------------- */
-int AMCEpoll_Dispatch(struct AMCEpoll *obj)
+/* --------------------AMCEpoll_Dispatch----------------------- */
+int AMCEpoll_Dispatch(struct AMCEpoll *base)
 {
-	if (NULL == obj) {
+	if (NULL == base) {
 		ERROR("Nil parameter");
 		_RETURN_ERR(EINVAL);
 	} 
-	else if (0 == cAssocArray_Size(obj->all_events)) {
+	else if (0 == cAssocArray_Size(base->all_events)) {
 		return 0;
 	}
 	else {
-		return _dispatch_main_loop(obj);
+		return _dispatch_main_loop(base);
 	}
 }
 
 
 /* --------------------AMCEpoll_LoopExit----------------------- */
-int AMCEpoll_LoopExit(struct AMCEpoll *obj)
+int AMCEpoll_LoopExit(struct AMCEpoll *base)
 {
-	if (NULL == obj) {
+	if (NULL == base) {
 		ERROR("Nil parameter");
 		_RETURN_ERR(EINVAL);
 	} else {
-		obj->base_status |= EP_STAT_SHOULD_EXIT;
+		base->base_status |= EP_STAT_SHOULD_EXIT;
 		return 0;
 	}
 }
@@ -422,7 +361,8 @@ int AMCFd_MakeNonBlock(int fd)
 		flags = fcntl(fd, F_SETFL, (flags | O_NONBLOCK));
 		if (0 == flags) {
 			return 0;
-		} else {
+		}
+		else {
 			int err = errno;
 			ERROR("Failed to set O_NONBLOCK for fd %d: %s", fd, strerror(err));
 			_RETURN_ERR(err);
@@ -443,7 +383,8 @@ int AMCFd_MakeCloseOnExec(int fd)
 		flags = fcntl(fd, F_SETFD, (flags | FD_CLOEXEC));
 		if (0 == flags) {
 			return 0;
-		} else {
+		}
+		else {
 			int err = errno;
 			ERROR("Failed to set FD_CLOEXEC for fd %d: %s", fd, strerror(err));
 			_RETURN_ERR(err);

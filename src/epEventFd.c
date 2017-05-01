@@ -28,6 +28,7 @@
 #define __HEADERS_AND_MACROS
 #ifdef __HEADERS_AND_MACROS
 
+#include "epEvent.h"
 #include "epEventFd.h"
 #include "utilLog.h"
 
@@ -46,6 +47,14 @@
 			return -1;\
 		}\
 	}while(0)
+
+
+
+int epEventFd_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
+int epEventFd_GenKey(struct AMCEpollEvent *event, char *keyOut, size_t nBuffLen);
+int epEventFd_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
+int epEventFd_Destroy(struct AMCEpollEvent *event);
+int epEventFd_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent);
 
 #endif
 
@@ -81,6 +90,23 @@ static int _epoll_code_from_amc_code(events_t amcEv)
 		/* nothing */
 	}
 #endif
+	return ret;
+}
+
+
+/* --------------------_amc_code_from_epoll_code----------------------- */
+static events_t _amc_code_from_epoll_code(int epollEv)
+{
+	events_t ret = 0;
+	if (BITS_ANY_SET(epollEv, EPOLLIN | EPOLLPRI)) {
+		ret |= EP_EVENT_READ;
+	}
+	if (BITS_ANY_SET(epollEv, EPOLLOUT)) {
+		ret |= EP_EVENT_WRITE;
+	}
+	if (BITS_ANY_SET(epollEv, EPOLLERR | EPOLLHUP)) {
+		ret |= EP_EVENT_ERROR;
+	}
 	return ret;
 }
 
@@ -214,8 +240,8 @@ static int _del_fd_event(struct AMCEpoll *base, struct AMCEpollEvent *event)
 #endif
 
 /********/
-#define __PUBLIC_INTERFACES
-#ifdef __PUBLIC_INTERFACES
+#define __CLASS_PUBLIC_FUNCTIONS
+#ifdef __CLASS_PUBLIC_FUNCTIONS
 
 /* --------------------epEventFd_Create----------------------- */
 struct AMCEpollEvent *epEventFd_Create(int fd, events_t events, int timeout, ev_callback callback, void *userData)
@@ -247,7 +273,11 @@ struct AMCEpollEvent *epEventFd_Create(int fd, events_t events, int timeout, ev_
 	newEvent->user_data = userData;
 	newEvent->epoll_events = _epoll_code_from_amc_code(events);
 	newEvent->events = events;
+	newEvent->free_func = epEventFd_Destroy;
+	newEvent->genkey_func = epEventFd_GenKey;
+	newEvent->attach_func = epEventFd_AddToBase;
 	newEvent->detach_func = epEventFd_DetachFromBase;
+	newEvent->invoke_func = epEventFd_InvokeCallback;
 
 ENDS:
 	return newEvent;
@@ -261,16 +291,11 @@ int epEventFd_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 		ERROR("Invalid parameter");
 		_RETURN_ERR(EINVAL);
 	}
-	else if (FALSE == epEventFd_TypeMatch(event)) {
-		ERROR("Not file event");
-		_RETURN_ERR(EINVAL);
-	}
 	else {
-		char key[EVENT_KEY_LEN_MAX] = "";
 		struct AMCEpollEvent *oldEvent = NULL;
 
-		_snprintf_fd_key(event, key, sizeof(key));
-		oldEvent = epCommon_GetEvent(base, key);
+		_snprintf_fd_key(event, event->key, sizeof(event->key));
+		oldEvent = epCommon_GetEvent(base, event->key);
 
 		/* add a new event */
 		if (NULL == oldEvent) {
@@ -290,18 +315,10 @@ int epEventFd_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 }
 
 
-/* --------------------epEvendFd_TypeMatch----------------------- */
-BOOL epEventFd_TypeMatch(struct AMCEpollEvent *event)
+/* --------------------epEventFd_IsFileEvent----------------------- */
+BOOL epEventFd_IsFileEvent(events_t what)
 {
-	if (NULL == event) {
-		return FALSE;
-	} else if (0 == (event->events & (EP_EVENT_READ | EP_EVENT_WRITE))) {
-		return FALSE;
-	} else if (event->fd < 0) {
-		return FALSE;
-	} else {
-		return TRUE;
-	}
+	return BITS_ANY_SET(what, (EP_EVENT_READ | EP_EVENT_WRITE));
 }
 
 
@@ -315,11 +332,6 @@ int epEventFd_GenKey(struct AMCEpollEvent *event, char *keyOut, size_t nBuffLen)
 		_RETURN_ERR(EINVAL);
 	}
 
-	if (FALSE == epEventFd_TypeMatch(event)) {
-		ERROR("Not file event");
-		_RETURN_ERR(EINVAL);
-	}
-
 	_snprintf_fd_key(event, keyOut, nBuffLen);
 	return 0;
 }
@@ -328,18 +340,13 @@ int epEventFd_GenKey(struct AMCEpollEvent *event, char *keyOut, size_t nBuffLen)
 /* --------------------epEventFd_DetachFromBase----------------------- */
 int epEventFd_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
-	if (base && event) {
-		/* OK */
-	} else {
+	if ((NULL == base) || (NULL == event))
+	{
 		ERROR("Invalid parameter");
 		_RETURN_ERR(EINVAL);
 	}
-
-	if (FALSE == epEventFd_TypeMatch(event)) {
-		ERROR("Not file event");
-		_RETURN_ERR(EINVAL);
-	}
-	else {
+	else
+	{
 		int callStat = 0;
 		char key[EVENT_KEY_LEN_MAX];
 		struct AMCEpollEvent *eventInBase = NULL;
@@ -371,11 +378,30 @@ int epEventFd_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 /* --------------------epEventFd_Destroy----------------------- */
 int epEventFd_Destroy(struct AMCEpollEvent *event)
 {
-	if (FALSE == epEventFd_TypeMatch(event)) {
-		_RETURN_ERR(EINVAL);
-	} else {
-		epCommon_InvokeCallback(event, event->fd, EP_EVENT_FREE);
-		return epCommon_FreeEmptyEvent(event);
+	if (NULL == event) {
+		RETURN_ERR(EINVAL);
+	}
+	else {
+		epEventIntnl_InvokeUserFreeCallback(event, event->fd);
+		return epEventIntnl_FreeEmptyEvent(event);
+	}
+}
+
+
+/* --------------------epEventFd_InvokeCallback----------------------- */
+int epEventFd_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent)
+{
+	events_t userWhat = 0;
+	if (base && event && epollEvent)
+	{
+		userWhat = _amc_code_from_epoll_code(epollEvent);
+		if (BITS_HAVE_INTRSET(userWhat, event->events)) {
+			epEventIntnl_InvokeUserCallback(event, event->fd, userWhat);
+		}
+		return 0;
+	}
+	else {
+		RETURN_ERR(EINVAL);
 	}
 }
 
