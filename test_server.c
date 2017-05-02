@@ -2,7 +2,7 @@
 	Copyright (C) 2017 by Andrew Chang <laplacezhang@126.com>
 	Licensed under the LGPL v2.1, see the file COPYING in base directory.
 	
-	File name: 	test.c
+	File name: 	test_server.c
 	
 	Description: 	
 	    This is the test source for AMCEpoll. If you want to use AMCEpoll itself
@@ -31,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <signal.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -38,12 +39,92 @@
 #include <arpa/inet.h>
 
 #define _CFG_SRV_PORT		8000
-#define _LOG(fmt, args...)		printf("[Srv - %04d] "fmt"\n", __LINE__, ##args)
+#define _LOG(fmt, args...)		printf("[Srv - %04ld] "fmt"\n", (long)__LINE__, ##args)
+
+
+/********/
+#define __SIGNAL_OPERATIONS
+#ifdef __SIGNAL_OPERATIONS
+
+enum {
+	PIPE_READ = 0,
+	PIPE_WRITE = 1,
+};
+
+
+/* ------------------------------------------- */
+static void _callback_signal(struct AMCEpollEvent *theEvent, int signal, events_t events, void *arg)
+{
+	static int sigIntCount = 0;
+
+	if (events & EP_EVENT_SIGNAL)
+	{
+		_LOG("Get signal %s", strsignal(signal));
+		switch(signal)
+		{
+		default:
+			_LOG("Ignore signal %d", signal);
+			break;
+		case SIGQUIT:
+			_LOG("Ignore signal %d", signal);
+			break;
+		case SIGINT:
+			_LOG("Got signal SIGINT, quit program.");
+			AMCEpoll_LoopExit((struct AMCEpoll *)arg);
+			
+			if (sigIntCount ++  > 5) {
+				_LOG("Abnormal!");
+				exit(1);
+			}			
+			break;
+		}
+	}
+	else {
+		_LOG("Unsupported event: 0x%x", (int)events);
+	}
+
+	return;
+}
+
+
+/* ------------------------------------------- */
+static int _create_signal_handler(struct AMCEpoll *base, int sigNum)
+{
+	int callStat = 0;
+	struct AMCEpollEvent *sigEvent = AMCEpoll_NewEvent(sigNum, 
+												EP_MODE_PERSIST | EP_EVENT_SIGNAL, 
+												-1, _callback_signal, base);
+	if (NULL == sigEvent) {
+		_LOG("Failed to create sigEvent: %s", strerror(errno));
+		return -1;
+	}
+
+	callStat = AMCEpoll_AddEvent(base, sigEvent);
+	if (callStat < 0) {
+		_LOG("Failed to add event: %s", strerror(-callStat));
+		AMCEpoll_FreeEvent(sigEvent);
+		sigEvent = NULL;
+	}
+
+	return callStat;
+}
+
+
+
+
+#endif
+
 
 
 /********/
 #define __DEBUG_FUNCTIONS
 #ifdef __DEBUG_FUNCTIONS
+
+/* ------------------------------------------- */
+static void _general_test()
+{
+	return;
+}
 
 /* ------------------------------------------- */
 static char _char_from_byte(uint8_t byte)
@@ -82,7 +163,7 @@ void _print_data(const void *pData, const size_t size)
 	const uint8_t *data = pData;
 
 	printf ("---------------------------------------------------------------------------\n");
-	printf ("Base: 0x%08lx, length %d(0x%04x)\n", (unsigned long)(data), size, size);
+	printf ("Base: 0x%08lx, length %ld(0x%04lx)\n", (unsigned long)(data), (long)size, (long)size);
 	printf ("----  +0 +1 +2 +3 +4 +5 +6 +7  +8 +9 +A +B +C +D +E +F    01234567 89ABCDEF\n");
 //	printf ("---------------------------------------------------------------------------\n");
 	
@@ -119,7 +200,7 @@ void _print_data(const void *pData, const size_t size)
 			}
 		}
 
-		printf ("%04X: %s   %s\n", tmp, lineString, linechar);
+		printf ("%04lX: %s   %s\n", (long)tmp, lineString, linechar);
 	}
 
 	/* last line */
@@ -167,7 +248,7 @@ void _print_data(const void *pData, const size_t size)
 			}
 		}
 #endif
-		printf ("%04X: %s   %s\n", tmp, lineString, linechar);
+		printf ("%04lX: %s   %s\n", (long)tmp, lineString, linechar);
 	}
 	
 	printf ("---------------------------------------------------------------------------\n");
@@ -222,7 +303,7 @@ static ssize_t _write_http_data(int fd)
 
 
 /* ------------------------------------------- */
-static void _callback_read(int fd, uint16_t events, void *arg)
+static void _callback_read(struct AMCEpollEvent *theEvent, int fd, events_t events, void *arg)
 {
 	struct AMCEpoll *base = (struct AMCEpoll *)arg;
 
@@ -233,7 +314,7 @@ static void _callback_read(int fd, uint16_t events, void *arg)
 	}
 	else if (events & EP_EVENT_ERROR) {
 		_LOG("Error on fd %d", fd);
-		AMCEpoll_DelEventByFd(base, fd);
+		AMCEpoll_DelAndFreeEvent(base, theEvent);
 		fd = -1;
 	}
 	else if (events & EP_EVENT_READ) {
@@ -243,12 +324,12 @@ static void _callback_read(int fd, uint16_t events, void *arg)
 		readLen = AMCFd_Read(fd, buff, sizeof(buff));
 		if (0 == readLen) {
 			_LOG("EOF on fd %d", fd);
-			AMCEpoll_DelEventByFd(base, fd);
+			AMCEpoll_DelAndFreeEvent(base, theEvent);
 			fd = -1;
 		}
 		else if (readLen < 0) {
 			_LOG("Failed in reading data: %s", strerror(errno));
-			AMCEpoll_DelEventByFd(base, fd);
+			AMCEpoll_DelAndFreeEvent(base, theEvent);
 			fd = -1;
 		}
 		else {
@@ -263,8 +344,8 @@ static void _callback_read(int fd, uint16_t events, void *arg)
 				writeLen += callStat;
 			}
 
-			_LOG("Written %d bytes", callStat);
-			AMCEpoll_DelEventByFd(base, fd);
+			_LOG("Written %ld bytes", (long)callStat);
+			AMCEpoll_DelAndFreeEvent(base, theEvent);
 		}
 	}
 
@@ -273,7 +354,7 @@ static void _callback_read(int fd, uint16_t events, void *arg)
 
 
 /* ------------------------------------------- */
-static void _callback_accept(int fd, uint16_t events, void *arg)
+static void _callback_accept(struct AMCEpollEvent *theEvent, int fd, events_t events, void *arg)
 {
 	struct AMCEpoll *base = (struct AMCEpoll *)arg;
 
@@ -284,7 +365,7 @@ static void _callback_accept(int fd, uint16_t events, void *arg)
 	}
 	else if (events & EP_EVENT_ERROR) {
 		_LOG("Error on fd %d", fd);
-		AMCEpoll_DelEventByFd(base, fd);
+		AMCEpoll_DelAndFreeEvent(base, theEvent);
 		fd = -1;
 	}
 	else if (events & EP_EVENT_READ) {
@@ -319,10 +400,17 @@ static void _callback_accept(int fd, uint16_t events, void *arg)
 		}
 
 		if (isOK) {
-			callStat = AMCEpoll_AddEvent(base, newFd, EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_MODE_PERSIST,
-										0, _callback_read, base, NULL);
+			struct AMCEpollEvent *newEvent= AMCEpoll_NewEvent(newFd, 
+										EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_MODE_PERSIST, 
+										0, _callback_read, base);
+			if (NULL == newEvent) {
+				_LOG("Failed to create a new event: %s", strerror(errno));
+			}
+
+			callStat = AMCEpoll_AddEvent(base, newEvent);
 			if (callStat < 0) {
 				_LOG("Failed to add read event");
+				AMCEpoll_FreeEvent(newEvent);
 				isOK = FALSE;
 			}
 		}
@@ -349,6 +437,8 @@ int _create_local_server(struct AMCEpoll *base)
 	int retCode = -1;
 	int callStat = 0;
 	struct sockaddr_in address;
+	struct AMCEpollEvent *acceptEvent = NULL;
+
 	int fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (fd < 0) {
 		goto ERROR;
@@ -386,15 +476,26 @@ int _create_local_server(struct AMCEpoll *base)
 		goto ERROR;
 	}
 
-	callStat = AMCEpoll_AddEvent(base, fd,
-					EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_EVENT_TIMEOUT,
-					0, _callback_accept, base, NULL);\
+	acceptEvent = AMCEpoll_NewEvent(fd, 
+					EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_EVENT_TIMEOUT, 
+					0, _callback_accept, base);
+	if (NULL == acceptEvent) {
+		_LOG("Failed to create event: %s", strerror(errno));
+		goto ERROR;
+	}
+
+	callStat = AMCEpoll_AddEvent(base, acceptEvent);
 	if (callStat < 0) {
+		_LOG("Failed to add event: %s", strerror(errno));
 		goto ERROR;
 	}
 
 	return 0;
 ERROR:
+	if (acceptEvent) {
+		AMCEpoll_FreeEvent(acceptEvent);
+		acceptEvent = NULL;
+	}
 	if (fd > 0) {
 		close(fd);
 		fd = -1;
@@ -416,9 +517,21 @@ int main(int argc, char* argv[])
 	int callStat = 0;
 	struct AMCEpoll *base = NULL;
 	_LOG("Hello, AMCEpoll!");
+
+	_general_test();
 	
 	base = AMCEpoll_New(1024);
 	if (NULL == base) {
+		goto END;
+	}
+
+	callStat = _create_signal_handler(base, SIGQUIT);
+	if (callStat < 0) {
+		goto END;
+	}
+
+	callStat = _create_signal_handler(base, SIGINT);
+	if (callStat < 0) {
 		goto END;
 	}
 

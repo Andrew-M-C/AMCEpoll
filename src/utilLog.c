@@ -80,6 +80,8 @@ ssize_t utilLog(int level, const char *format, ...)
 	else {
 		char buff[CFG_MAX_LOG_LEN] = "";
 		char usec[8] = "";
+		ssize_t ret = 0;
+		int errCopy = errno;
 		va_list vaList;
 		
 		size_t prefixLen = 0;
@@ -108,7 +110,9 @@ ssize_t utilLog(int level, const char *format, ...)
 		buff[prefixLen + 0] = '\n';
 		buff[prefixLen + 1] = '\0';
 
-		return write(1, buff, prefixLen + 1);
+		ret = write(1, buff, prefixLen + 1);
+		errno = errCopy;
+		return ret;
 	}
 }
 

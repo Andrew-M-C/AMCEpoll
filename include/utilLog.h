@@ -43,14 +43,14 @@ enum {
 
 #define CFG_MAX_LOG_LEN			512
 
-#define DEBUG(fmt, args...)		utilLog(LOG_LV_DEBUG, __FILE__" %d:"fmt, __LINE__, ##args)
-#define INFO(fmt, args...)		utilLog(LOG_LV_INFO, __FILE__" %d:"fmt, __LINE__, ##args)
-#define NOTICE(fmt, args...)		utilLog(LOG_LV_NOTICE, __FILE__" %d:"fmt, __LINE__, ##args)
-#define WARN(fmt, args...)		utilLog(LOG_LV_WARNING, __FILE__" %d:"fmt, __LINE__, ##args)
-#define ERROR(fmt, args...)		utilLog(LOG_LV_ERR, __FILE__" %d:"fmt, __LINE__, ##args)
-#define CRIT(fmt, args...)		utilLog(LOG_LV_CRIT, __FILE__" %d:"fmt, __LINE__, ##args)
-#define ALERT(fmt, args...)		utilLog(LOG_LV_ALERT, __FILE__" %d:"fmt, __LINE__, ##args)
-#define EMERG(fmt, args...)		utilLog(LOG_LV_EMERG, __FILE__" %d:"fmt, __LINE__, ##args)
+#define DEBUG(fmt, args...)		utilLog(LOG_LV_DEBUG, __FILE__" %d: "fmt, __LINE__, ##args)
+#define INFO(fmt, args...)		utilLog(LOG_LV_INFO, __FILE__" %d: "fmt, __LINE__, ##args)
+#define NOTICE(fmt, args...)		utilLog(LOG_LV_NOTICE, __FILE__" %d: "fmt, __LINE__, ##args)
+#define WARN(fmt, args...)		utilLog(LOG_LV_WARNING, __FILE__" %d: "fmt, __LINE__, ##args)
+#define ERROR(fmt, args...)		utilLog(LOG_LV_ERR, __FILE__" %d: "fmt, __LINE__, ##args)
+#define CRIT(fmt, args...)		utilLog(LOG_LV_CRIT, __FILE__" %d: "fmt, __LINE__, ##args)
+#define ALERT(fmt, args...)		utilLog(LOG_LV_ALERT, __FILE__" %d: "fmt, __LINE__, ##args)
+#define EMERG(fmt, args...)		utilLog(LOG_LV_EMERG, __FILE__" %d: "fmt, __LINE__, ##args)
 
 /********/
 /* functions */

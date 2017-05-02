@@ -53,45 +53,52 @@ struct AMCEpollEvent;
 #endif
 #endif
 
-/* for uint16_t "events" */
+typedef uint16_t events_t;
+
+/* for events_t "events" */
 enum {
 	EP_EVENT_READ    = (1 << 0),
 	EP_EVENT_WRITE   = (1 << 1),
 	EP_EVENT_ERROR   = (1 << 2),
 	EP_EVENT_FREE    = (1 << 3),
 	EP_EVENT_TIMEOUT = (1 << 4),
+	EP_EVENT_SIGNAL  = (1 << 5),
 
 	EP_MODE_PERSIST  = (1 << 8),	/* only used when adding events */
 	EP_MODE_EDGE     = (1 << 9),	/* only used when adding events */
 };
 
 /* callback */
-typedef void (*ev_callback)(int fd, uint16_t events, void *arg);
+typedef void (*ev_callback)(struct AMCEpollEvent *event, int fd, events_t events, void *arg);
 
 /********/
 /* functions */
 struct AMCEpoll *
-	AMCEpoll_New(size_t buffSize);
+	AMCEpoll_New(size_t poolSize);
 int
-	AMCEpoll_Free(struct AMCEpoll *obj);
+	AMCEpoll_Free(struct AMCEpoll *base);
+struct AMCEpollEvent *
+	AMCEpoll_NewEvent(int fd, events_t events, int timeout, ev_callback callback, void *userData);
 int 
-	AMCEpoll_AddEvent(struct AMCEpoll *obj, int fd, uint16_t events, int timeout, ev_callback callback, void *userData, struct AMCEpollEvent **eventOut);
+	AMCEpoll_FreeEvent(struct AMCEpollEvent *event);
 int 
-	AMCEpoll_DelEvent(struct AMCEpoll *obj, struct AMCEpollEvent *event);
+	AMCEpoll_AddEvent(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
-	AMCEpoll_DelEventByFd(struct AMCEpoll *obj, int fd);
+	AMCEpoll_DelEvent(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
-	AMCEpoll_GetFdByEvent(struct AMCEpollEvent *event);
+	AMCEpoll_DelAndFreeEvent(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
-	AMCEpoll_Dispatch(struct AMCEpoll *obj);
+	AMCEpoll_Dispatch(struct AMCEpoll *base);
 int 
-	AMCEpoll_LoopExit(struct AMCEpoll *obj);
+	AMCEpoll_LoopExit(struct AMCEpoll *base);
 int 
 	AMCFd_MakeNonBlock(int fd);
 int 
 	AMCFd_MakeCloseOnExec(int fd);
 ssize_t 
 	AMCFd_Read(int fd, void *buff, size_t nbyte);
+ssize_t 
+	AMCFd_Write(int fd, const void *buff, size_t nbyte);
 
 
 #endif
