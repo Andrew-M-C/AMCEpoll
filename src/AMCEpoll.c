@@ -150,6 +150,10 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 		}
 		// end of "else (nTotal < 0) {..."
 
+		/* main loop status check */
+		if (BITS_ANY_SET(base->base_status, EP_STAT_SHOULD_EXIT)) {
+			shouldExit = TRUE;
+		}
 	} while (FALSE == shouldExit);
 	// end of "do - while (FALSE == shouldExit)"
 

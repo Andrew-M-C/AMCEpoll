@@ -51,38 +51,32 @@ enum {
 	PIPE_WRITE = 1,
 };
 
-static int g_signal_pipe[2] = {-1, -1};
 
 /* ------------------------------------------- */
-static void _sigquit_handler(int signum)
+static void _callback_signal(struct AMCEpollEvent *theEvent, int signal, events_t events, void *arg)
 {
-	if (g_signal_pipe[PIPE_WRITE] > 0) {
-		write(g_signal_pipe[PIPE_WRITE], &signum, sizeof(signum));
-	}
-	return;
-}
+	static int sigIntCount = 0;
 
-
-/* ------------------------------------------- */
-static void _callback_signal_read(struct AMCEpollEvent *theEvent, int fd, events_t events, void *arg)
-{
-	int signum = 0;
-	ssize_t callStat = 0;
-	if (events & EP_EVENT_READ)
+	if (events & EP_EVENT_SIGNAL)
 	{
-		callStat = AMCFd_Read(fd, &signum, sizeof(signum));
-		if (callStat < 0) {
-			_LOG("Failed to read data: %s", strerror(errno));
-		}
-		else if (0 == callStat) {
-			//_LOG("Fin %d", signum);
-		}
-		else if (sizeof(signum) == callStat) {
-			_LOG("Got event: %s", strsignal(signum));
-			_callback_signal_read(theEvent, fd, events, arg);
-		}
-		else {
-			_LOG("Illegal return status: %d", (int)callStat);
+		_LOG("Get signal %s", strsignal(signal));
+		switch(signal)
+		{
+		default:
+			_LOG("Ignore signal %d", signal);
+			break;
+		case SIGQUIT:
+			_LOG("Ignore signal %d", signal);
+			break;
+		case SIGINT:
+			_LOG("Got signal SIGINT, quit program.");
+			AMCEpoll_LoopExit((struct AMCEpoll *)arg);
+			
+			if (sigIntCount ++  > 5) {
+				_LOG("Abnormal!");
+				exit(1);
+			}			
+			break;
 		}
 	}
 	else {
@@ -94,53 +88,25 @@ static void _callback_signal_read(struct AMCEpollEvent *theEvent, int fd, events
 
 
 /* ------------------------------------------- */
-static int _create_signal_handler(struct AMCEpoll *base)
+static int _create_signal_handler(struct AMCEpoll *base, int sigNum)
 {
-	struct AMCEpollEvent *signalEvent = NULL;
 	int callStat = 0;
-	callStat = pipe(g_signal_pipe);
+	struct AMCEpollEvent *sigEvent = AMCEpoll_NewEvent(sigNum, 
+												EP_MODE_PERSIST | EP_EVENT_SIGNAL, 
+												-1, _callback_signal, base);
+	if (NULL == sigEvent) {
+		_LOG("Failed to create sigEvent: %s", strerror(errno));
+		return -1;
+	}
+
+	callStat = AMCEpoll_AddEvent(base, sigEvent);
 	if (callStat < 0) {
-		_LOG("Failed in pipe(): %s", strerror(errno));
-		return -1;
+		_LOG("Failed to add event: %s", strerror(-callStat));
+		AMCEpoll_FreeEvent(sigEvent);
+		sigEvent = NULL;
 	}
 
-	callStat = AMCFd_MakeCloseOnExec(g_signal_pipe[PIPE_READ]);
-	if (callStat < 0) {
-		return -1;
-	}
-
-	callStat = AMCFd_MakeCloseOnExec(g_signal_pipe[PIPE_WRITE]);
-	if (callStat < 0) {
-		return -1;
-	}
-
-	callStat = AMCFd_MakeNonBlock(g_signal_pipe[PIPE_READ]);
-	if (callStat < 0) {
-		return -1;
-	}
-
-	callStat = AMCFd_MakeNonBlock(g_signal_pipe[PIPE_WRITE]);
-	if (callStat < 0) {
-		return -1;
-	}
-
-	signal(SIGQUIT, _sigquit_handler);
-
-	signalEvent = AMCEpoll_NewEvent(g_signal_pipe[PIPE_READ], 
-								EP_EVENT_READ | EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_FREE, 
-								0, _callback_signal_read, base);
-
-	if (NULL == signalEvent) {
-		return -1;
-	}
-
-	callStat = AMCEpoll_AddEvent(base, signalEvent);
-	if (callStat < 0) {
-		AMCEpoll_FreeEvent(signalEvent);
-		return -1;
-	}
-
-	return 0;
+	return callStat;
 }
 
 
@@ -559,7 +525,12 @@ int main(int argc, char* argv[])
 		goto END;
 	}
 
-	callStat = _create_signal_handler(base);
+	callStat = _create_signal_handler(base, SIGQUIT);
+	if (callStat < 0) {
+		goto END;
+	}
+
+	callStat = _create_signal_handler(base, SIGINT);
 	if (callStat < 0) {
 		goto END;
 	}

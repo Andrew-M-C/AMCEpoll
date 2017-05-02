@@ -140,13 +140,18 @@ static int _epoll_signal_del(struct AMCEpoll *base, struct AMCEpollEvent *amcEve
 	int callStat = 0;
 	struct EpSigPipe *sigPipe = (struct EpSigPipe *)(amcEvent->inter_data);
 
-	callStat = epoll_ctl(base->epoll_fd, EPOLL_CTL_DEL, sigPipe->fd[PIPE_READ], NULL);
-	if (0 == callStat) {
+	if (sigPipe->fd[PIPE_READ] > 0) {
+		callStat = epoll_ctl(base->epoll_fd, EPOLL_CTL_DEL, sigPipe->fd[PIPE_READ], NULL);
+		if (0 == callStat) {
+			return 0;
+		} else {
+			int err = errno;
+			ERROR("Failed in epoll_del(): %s", strerror(err));
+			_RETURN_ERR(err);
+		}
+	}
+	else {
 		return 0;
-	} else {
-		int err = errno;
-		ERROR("Failed in epoll_del(): %s", strerror(err));
-		_RETURN_ERR(err);
 	}
 }
 
@@ -634,6 +639,16 @@ static int epEventSignal_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEv
 	events_t userWhat = 0;
 	if (base && event && epollEvent)
 	{
+		int sigNum = 0;
+		ssize_t callStat = 0;
+		struct EpSigPipe *sigPipe = (struct EpSigPipe *)(event->inter_data);
+
+		do {
+			callStat = AMCFd_Read(sigPipe->fd[PIPE_READ], &sigNum, sizeof(sigNum));
+		} while(callStat > 0);
+
+		DEBUG("Get signal: %s (%d)", strsignal(sigNum), sigNum);
+		
 		userWhat = _amc_code_from_signal_epoll_code(epollEvent);
 		if (BITS_HAVE_INTRSET(userWhat, event->events)) {
 			epEventIntnl_InvokeUserCallback(event, event->fd, userWhat);

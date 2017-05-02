@@ -29,6 +29,7 @@
 #ifdef __HEADERS_AND_MACROS
 
 #include "epEventFd.h"
+#include "epEventSignal.h"
 
 #include "epCommon.h"
 #include "epEvent.h"
@@ -170,6 +171,9 @@ struct AMCEpollEvent *epEvent_New(int fd, events_t what, int timeout, ev_callbac
 {
 	if (epEventFd_IsFileEvent(what)) {
 		return epEventFd_Create(fd, what, timeout, callback, userData);
+	}
+	if (epEventSignal_IsSignalEvent(what)) {
+		return epEventSignal_Create(fd, what, timeout, callback, userData);
 	}
 	// TODO:
 	else {
