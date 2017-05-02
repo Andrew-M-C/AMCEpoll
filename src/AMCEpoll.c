@@ -28,7 +28,6 @@
 #define __HEADERS
 #ifdef __HEADERS
 
-#include "epCommon.h"
 #include "epEvent.h"
 #include "utilLog.h"
 #include "AMCEpoll.h"
@@ -75,20 +74,6 @@ enum {
 			return -1;\
 		}\
 	}while(0)
-
-#define _RETURN_ERR(err)	\
-	do{\
-		if (err > 0) {\
-			errno = err;\
-			return (0 - err);\
-		} else if (err < 0) {\
-			errno = 0 - err;\
-			return err;\
-		} else {\
-			return -1;\
-		}\
-	}while(0)
-
 
 #endif
 
@@ -162,7 +147,7 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 
 	/* return */
 	if (base->base_status & EP_STAT_EPOLL_ERROR) {
-		_RETURN_ERR(errCpy);
+		RETURN_ERR(errCpy);
 	}
 	else {
 		return 0;
@@ -232,7 +217,7 @@ int AMCEpoll_Free(struct AMCEpoll *base)
 {
 	if (NULL == base) {
 		ERROR("Nil parameter");
-		_RETURN_ERR(EINVAL);
+		RETURN_ERR(EINVAL);
 	}
 	else
 	{
@@ -245,7 +230,7 @@ int AMCEpoll_Free(struct AMCEpoll *base)
 
 			while (eachKey)
 			{
-				eachEvent = epCommon_GetEvent(base, eachKey->key);
+				eachEvent = epEvent_GetEvent(base, eachKey->key);
 				if (eachEvent) {
 					if (NULL == eachEvent->detach_func) {
 						CRIT("No detach function defined for event %p", eachEvent);
@@ -254,7 +239,7 @@ int AMCEpoll_Free(struct AMCEpoll *base)
 						if (callStat < 0) {
 							CRIT("Failed to detach event %p: %s", eachEvent, strerror(errno));
 						}
-						callStat = epCommon_FreeEmptyEvent(eachEvent);
+						callStat = epEvent_DelFromBaseAndFree(base, eachEvent);
 						if (callStat < 0) {
 							CRIT("Failed to free event %p: %s", eachEvent, strerror(errno));
 						}
@@ -333,7 +318,7 @@ int AMCEpoll_Dispatch(struct AMCEpoll *base)
 {
 	if (NULL == base) {
 		ERROR("Nil parameter");
-		_RETURN_ERR(EINVAL);
+		RETURN_ERR(EINVAL);
 	} 
 	else if (0 == cAssocArray_Size(base->all_events)) {
 		return 0;
@@ -349,7 +334,7 @@ int AMCEpoll_LoopExit(struct AMCEpoll *base)
 {
 	if (NULL == base) {
 		ERROR("Nil parameter");
-		_RETURN_ERR(EINVAL);
+		RETURN_ERR(EINVAL);
 	} else {
 		base->base_status |= EP_STAT_SHOULD_EXIT;
 		return 0;
@@ -362,7 +347,7 @@ int AMCFd_MakeNonBlock(int fd)
 {
 	if (fd < 0) {
 		ERROR("Invalid file descriptor");
-		_RETURN_ERR(EINVAL);
+		RETURN_ERR(EINVAL);
 	}
 	else {
 		int flags = fcntl(fd, F_GETFL, NULL);
@@ -373,7 +358,7 @@ int AMCFd_MakeNonBlock(int fd)
 		else {
 			int err = errno;
 			ERROR("Failed to set O_NONBLOCK for fd %d: %s", fd, strerror(err));
-			_RETURN_ERR(err);
+			RETURN_ERR(err);
 		}
 	}
 }
@@ -384,7 +369,7 @@ int AMCFd_MakeCloseOnExec(int fd)
 {
 	if (fd < 0) {
 		ERROR("Invalid file descriptor");
-		_RETURN_ERR(EINVAL);
+		RETURN_ERR(EINVAL);
 	}
 	else {
 		int flags = fcntl(fd, F_GETFD, NULL);
@@ -395,7 +380,7 @@ int AMCFd_MakeCloseOnExec(int fd)
 		else {
 			int err = errno;
 			ERROR("Failed to set FD_CLOEXEC for fd %d: %s", fd, strerror(err));
-			_RETURN_ERR(err);
+			RETURN_ERR(err);
 		}
 	}
 }
@@ -411,10 +396,10 @@ ssize_t AMCFd_Read(int fd, void *rawBuf, size_t nbyte)
 	BOOL isDone = FALSE;
 
 	if (fd < 0) {
-		_RETURN_ERR(EBADF);
+		RETURN_ERR(EBADF);
 	}
 	if (NULL == buff) {
-		_RETURN_ERR(EINVAL);
+		RETURN_ERR(EINVAL);
 	}
 	if (0 == nbyte) {
 		return 0;
@@ -469,10 +454,10 @@ ssize_t AMCFd_Write(int fd, const void *buff, size_t nbyte)
 	BOOL isDone = FALSE;
 
 	if (fd < 0) {
-		_RETURN_ERR(EBADF);
+		RETURN_ERR(EBADF);
 	}
 	if (NULL == buff) {
-		_RETURN_ERR(EINVAL);
+		RETURN_ERR(EINVAL);
 	}
 	if (0 == nbyte) {
 		return 0;

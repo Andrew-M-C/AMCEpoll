@@ -197,12 +197,9 @@ static void _snprintf_fd_key(struct AMCEpollEvent *event, char *str, size_t buff
 static int _add_fd_event(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
 	int callStat = 0;
-	char key[EVENT_KEY_LEN_MAX];
+	DEBUG("Add new event: %s - %p", event->key, event);
 
-	_snprintf_fd_key(event, key, sizeof(key));
-	DEBUG("Add new event: %s - %p", key, event);
-
-	callStat = epCommon_AddEvent(base, event, key);
+	callStat = epEventIntnl_AttachToBase(base, event);
 	if (callStat < 0) {
 		int err = errno;
 		ERROR("Failed to add new event: %s", strerror(err));
@@ -215,7 +212,7 @@ static int _add_fd_event(struct AMCEpoll *base, struct AMCEpollEvent *event)
 	}
 	else {
 		int err = errno;
-		epCommon_DetachEvent(base, key);
+		epEventIntnl_DetachFromBase(base, event);
 		_RETURN_ERR(err);
 	}
 }
@@ -261,7 +258,7 @@ struct AMCEpollEvent *epEventFd_Create(int fd, events_t events, int timeout, ev_
 		goto ENDS;
 	}
 
-	newEvent = epCommon_NewEmptyEvent();
+	newEvent = epEventIntnl_NewEmptyEvent();
 	if (NULL == newEvent) {
 		goto ENDS;
 	}
@@ -291,7 +288,7 @@ int epEventFd_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 		_RETURN_ERR(EINVAL);
 	}
 	else {
-		struct AMCEpollEvent *oldEvent = epCommon_GetEvent(base, event->key);
+		struct AMCEpollEvent *oldEvent = epEventIntnl_GetEvent(base, event->key);
 
 		/* add a new event */
 		if (NULL == oldEvent) {
@@ -345,9 +342,9 @@ int epEventFd_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 	{
 		int callStat = 0;
 		struct AMCEpollEvent *eventInBase = NULL;
-		eventInBase = epCommon_GetEvent(base, event->key);
+		eventInBase = epEventIntnl_GetEvent(base, event->key);
 		if (eventInBase != event) {
-			ERROR("Event %p is not menber of Base %p", event, base);
+			ERROR("Event %p is not member of Base %p", event, base);
 			_RETURN_ERR(ENOENT);
 		}
 

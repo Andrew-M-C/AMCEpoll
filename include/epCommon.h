@@ -5,9 +5,10 @@
 	File name: 	epCommon.h
 	
 	Description: 	
-	    This file declares internal data structures for all events.
+	    This file declares common data structures for all events.
 			
 	History:
+		2017-05-02: Remove functions. Those functions is replaced by epEvent.
 		2017-04-26: File created as "epCommon.h"
 
 	------------------------------------------------------------------------
@@ -92,28 +93,6 @@ struct AMCEpoll {
 		}\
 	}while(0)
 
-// TODO: deprecated
-/* common interfaces */
-struct AMCEpollEvent *
-	epCommon_NewEmptyEvent(void);
-int 
-	epCommon_FreeEmptyEvent(struct AMCEpollEvent *event);
-struct AMCEpollEvent *
-	epCommon_GetEvent(struct AMCEpoll *base, const char *key);
-int 
-	epCommon_AddEvent(struct AMCEpoll *base, struct AMCEpollEvent *event, const char *key);
-struct AMCEpollEvent * 
-	epCommon_DetachEvent(struct AMCEpoll *base, const char *key);
-int 
-	epCommon_InvokeCallback(struct AMCEpollEvent *event, int fdOrSig, events_t eventCodes);
-BOOL 
-	epCommon_IsFileEvent(events_t events);
-BOOL 
-	epCommon_IsTimeoutEvent(events_t events);
-BOOL 
-	epCommon_IsSignalEvent(events_t events);
-events_t 
-	epCommon_EventCodeEpollToAmc(int epollEvents);
 
 #endif
 /* EOF */

@@ -417,7 +417,7 @@ static events_t _amc_code_from_signal_epoll_code(int epollCode)
 static int _add_signal_event_LOCKED(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
 	int callStat = 0;
-	callStat = epCommon_AddEvent(base, event, event->key);
+	callStat = epEventIntnl_AttachToBase(base, event);
 	if (callStat < 0) {
 		ERROR("Failed to add signal event %d: %s", event->fd, strerror(errno));
 		goto FAILED;
@@ -519,7 +519,7 @@ struct AMCEpollEvent *epEventSignal_Create(int sig, events_t events, int timeout
 
 	_init_global_variables();
 
-	newEvent = epCommon_NewEmptyEvent();
+	newEvent = epEventIntnl_NewEmptyEvent();
 	if (NULL == newEvent) {
 		return NULL;
 	}
@@ -551,7 +551,7 @@ static int epEventSignal_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *
 		_RETURN_ERR(EINVAL);
 	}
 	else {
-		struct AMCEpollEvent *oldEvent = epCommon_GetEvent(base, event->key);
+		struct AMCEpollEvent *oldEvent = epEventIntnl_GetEvent(base, event->key);
 
 		/* add a new event */
 		if (NULL == oldEvent) {
@@ -605,7 +605,7 @@ static int epEventSignal_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEv
 
 		eventInBase = epEventIntnl_GetEvent(base, event->key);
 		if (eventInBase != event) {
-			ERROR("Event %p is not menber of Base %p", event, base);
+			ERROR("Event %p is not member of Base %p", event, base);
 			_RETURN_ERR(ENOENT);
 		}
 
@@ -627,8 +627,8 @@ static int epEventSignal_Destroy(struct AMCEpollEvent *event)
 	if (NULL == event) {
 		_RETURN_ERR(EINVAL);
 	} else {
-		epCommon_InvokeCallback(event, event->fd, EP_EVENT_FREE);
-		return epCommon_FreeEmptyEvent(event);
+		epEventIntnl_InvokeUserFreeCallback(event, event->fd);
+		return epEventIntnl_FreeEmptyEvent(event);
 	}
 }
 

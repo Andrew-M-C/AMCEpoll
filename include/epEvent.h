@@ -62,7 +62,11 @@ int
 int 
 	epEvent_DelFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
+	epEvent_DelFromBaseAndFree(struct AMCEpoll *base, struct AMCEpollEvent *event);
+int 
 	epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvents);
+//struct AMCEpollEvent *epEvent_GetEvent(struct AMCEpoll *base, const char *key);
+#define epEvent_GetEvent(base, key)		epEventIntnl_GetEvent((base), (key))
 
 #endif
 /* EOF */

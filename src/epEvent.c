@@ -246,6 +246,30 @@ int epEvent_DelFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 }
 
 
+/* --------------------epEvent_DelFromBaseAndFree----------------------- */
+int epEvent_DelFromBaseAndFree(struct AMCEpoll *base, struct AMCEpollEvent *event)
+{
+	if (NULL == base) {
+		RETURN_ERR(EINVAL);
+	} else if (NULL == event) {
+		RETURN_ERR(EINVAL);
+	}
+	else {
+		int callStat = 0;
+		struct AMCEpollEvent *oldEvent = epEvent_GetEvent(base, event->key);
+		if (oldEvent == event) {
+			callStat = epEvent_DelFromBase(base, event);
+		}
+
+		if (0 == callStat) {
+			callStat = epEvent_Free(event);
+		}
+
+		return callStat;
+	}
+}
+
+
 /* --------------------epEvent_InvokeCallback----------------------- */
 int epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvents)
 {
@@ -262,7 +286,6 @@ int epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, i
 		return (event->invoke_func)(base, event, epollEvents);
 	}
 }
-
 
 
 #endif
