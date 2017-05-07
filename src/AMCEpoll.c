@@ -272,7 +272,7 @@ int AMCEpoll_Free(struct AMCEpoll *base)
 
 
 /* --------------------AMCEpoll_NewEvent----------------------- */
-struct AMCEpollEvent *AMCEpoll_NewEvent(int fd, events_t events, int timeout, ev_callback callback, void *userData)
+struct AMCEpollEvent *AMCEpoll_NewEvent(int fd, events_t events, long timeout, ev_callback callback, void *userData)
 {
 	return epEvent_New(fd, events, timeout, callback, userData);
 }

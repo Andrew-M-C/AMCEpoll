@@ -78,7 +78,7 @@ struct AMCEpoll *
 int
 	AMCEpoll_Free(struct AMCEpoll *base);
 struct AMCEpollEvent *
-	AMCEpoll_NewEvent(int fd, events_t events, int timeout, ev_callback callback, void *userData);
+	AMCEpoll_NewEvent(int fd, events_t events, long timeout, ev_callback callback, void *userData);
 int 
 	AMCEpoll_FreeEvent(struct AMCEpollEvent *event);
 int 
@@ -87,6 +87,10 @@ int
 	AMCEpoll_DelEvent(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
 	AMCEpoll_DelAndFreeEvent(struct AMCEpoll *base, struct AMCEpollEvent *event);
+int 
+	AMCEpoll_SetEventTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event, int timeout);	// TODO:
+int 
+	AMCEpoll_GetEventTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event);					// TODO:
 int 
 	AMCEpoll_Dispatch(struct AMCEpoll *base);
 int 

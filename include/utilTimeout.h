@@ -2,13 +2,13 @@
 	Copyright (C) 2017 by Andrew Chang <laplacezhang@126.com>
 	Licensed under the LGPL v2.1, see the file COPYING in base directory.
 	
-	File name: 	epEventSignal.h
+	File name: 	utilTimeout.h
 	
 	Description: 	
-	    This file declares signal event interfaces for AMCEpoll.
+	    This file provides common timeout service for all types of events. 
 			
 	History:
-		2017-04-27: File created as "epEventSignal.h"
+		2017-05-07: File created as "utilTimeout.h"
 
 	------------------------------------------------------------------------
 
@@ -24,16 +24,37 @@
 		
 ********************************************************************************/
 
-#ifndef __EP_EVENT_SIGNAL_H__
-#define __EP_EVENT_SIGNAL_H__
+#ifndef __UTIL_TIMEOUT_H__
+#define __UTIL_TIMEOUT_H__
 
+/* headers */
 #include "epCommon.h"
-#include <errno.h>
 
-struct AMCEpollEvent *
-	epEventSignal_Create(int sig, events_t events, long timeout, ev_callback callback, void *userData);
-BOOL 
-	epEventSignal_IsSignalEvent(events_t what);
+#include <time.h>
+
+/* data definitions */
+/* all data structures should be used internally */
+struct UtilTimeoutChain {
+	// TODO:
+	
+};
+
+
+/* public functions */
+int 
+	utilTimeout_Init(struct UtilTimeoutChain *chain);
+int 
+	utilTimeout_Clean(struct UtilTimeoutChain *chain);
+int 
+	utilTimeout_AddObject(struct UtilTimeoutChain *chain, void *obj, uint64_t usec);
+int 
+	utilTimeout_DelObject(struct UtilTimeoutChain *chain, void *obj);
+struct timespec  
+	utilTimeout_GetMinimumTimeout(struct UtilTimeoutChain *chain, void **objOut);
+void *
+	utilTimeout_DrainTimeoutObject(struct UtilTimeoutChain *chain);			/* should invoke until NULL returns */
+struct timespec  
+	utilTimeout_GetSysupTime(void);
 
 
 #endif

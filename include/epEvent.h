@@ -52,7 +52,7 @@ struct AMCEpollEvent *
 
 /* Public Class Functions */
 struct AMCEpollEvent *
-	epEvent_New(int fd, events_t what, int timeout, ev_callback callback, void *userData);
+	epEvent_New(int fd, events_t what, long timeout, ev_callback callback, void *userData);
 int 
 	epEvent_Free(struct AMCEpollEvent *event);
 const char * 

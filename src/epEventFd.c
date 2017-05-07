@@ -239,7 +239,7 @@ static int _del_fd_event(struct AMCEpoll *base, struct AMCEpollEvent *event)
 #ifdef __CLASS_PUBLIC_FUNCTIONS
 
 /* --------------------epEventFd_Create----------------------- */
-struct AMCEpollEvent *epEventFd_Create(int fd, events_t events, int timeout, ev_callback callback, void *userData)
+struct AMCEpollEvent *epEventFd_Create(int fd, events_t events, long timeout, ev_callback callback, void *userData)
 {
 	struct AMCEpollEvent *newEvent = NULL;
 	if (fd < 0) {

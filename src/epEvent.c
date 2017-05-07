@@ -167,7 +167,7 @@ struct AMCEpollEvent *epEventIntnl_GetEvent(struct AMCEpoll *base, const char *k
 #ifdef __PUBLIC_INTERFACES
 
 /* --------------------epEvent_New----------------------- */
-struct AMCEpollEvent *epEvent_New(int fd, events_t what, int timeout, ev_callback callback, void *userData)
+struct AMCEpollEvent *epEvent_New(int fd, events_t what, long timeout, ev_callback callback, void *userData)
 {
 	if (epEventFd_IsFileEvent(what)) {
 		return epEventFd_Create(fd, what, timeout, callback, userData);

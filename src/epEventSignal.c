@@ -496,7 +496,7 @@ static int _del_signal_event_LOCKED(struct AMCEpoll *base, struct AMCEpollEvent 
 #ifdef __PUBLIC_INTERFACES
 
 /* --------------------epEventSignal_Create----------------------- */
-struct AMCEpollEvent *epEventSignal_Create(int sig, events_t events, int timeout, ev_callback callback, void *userData)
+struct AMCEpollEvent *epEventSignal_Create(int sig, events_t events, long timeout, ev_callback callback, void *userData)
 {
 	struct AMCEpollEvent *newEvent = NULL;
 	struct EpSigPipe *sigPipe = NULL;
