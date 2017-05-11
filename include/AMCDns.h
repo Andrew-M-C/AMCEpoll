@@ -1,0 +1,67 @@
+/*******************************************************************************
+	Copyright (C) 2017 by Andrew Chang <laplacezhang@126.com>
+	Licensed under the LGPL v2.1, see the file COPYING in base directory.
+	
+	File name: 	AMCDns.h
+	
+	Description: 	
+	    This file declares main interfaces of DNS tool.
+			
+	History:
+		2017-05-11: File created as "AMCDns.h"
+
+	------------------------------------------------------------------------
+
+	    This library is free software; you can redistribute it and/or modify it 
+	under the terms of the GNU Lesser General Public License as published by the 
+	Free Software Foundation, version 2.1 of the License. 
+	    This library is distributed in the hope that it will be useful, but WITHOUT
+	ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+	FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License for more
+	details. 
+	    You should have received a copy of the GNU Lesser General Public License 
+	along with this library; if not, see <http://www.gnu.org/licenses/>.
+		
+********************************************************************************/
+
+#ifndef __AMC_DNS_H__
+#define __AMC_DNS_H__
+
+/********/
+/* headers */
+#include <sys/types.h>
+#include <sys/socket.h>
+
+/********/
+/* data types */
+
+#define DNS_SERVER_PORT		53
+#define DNS_DOMAIN_LEN_MAX	255
+#define DNS_DOMAIN_PART_LEN_MAX	63
+
+#define IPV4_STR_LEN		15
+
+#ifndef NULL
+#ifndef _DO_NOT_DEFINE_NULL
+#define NULL	((void*)0)
+#endif
+#endif
+
+#ifndef BOOL
+#ifndef _DO_NOT_DEFINE_BOOL
+#define BOOL	int
+#define FALSE	0
+#define TRUE	(!(FALSE))
+#endif
+#endif
+
+/********/
+/* functions */
+
+int 
+	AMCDns_WriteRequest(int fd, const char *domain, const struct sockaddr * to, socklen_t toLen);
+
+
+#endif
+/* EOF */
+

@@ -26,6 +26,7 @@
 ********************************************************************************/
 
 #include "AMCEpoll.h"
+#include "AMCDns.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -428,11 +429,115 @@ static void _callback_accept(struct AMCEpollEvent *theEvent, int fd, events_t ev
 #endif
 
 /********/
+#define __DNS_OPERATION
+#ifdef __DNS_OPERATION
+
+typedef struct {
+	size_t len;
+	uint8_t buff[2048];
+} DNSBuffer_st;
+
+static DNSBuffer_st g_dnsBuff;
+
+
+/* ------------------------------------------- */
+static void _callback_dns(struct AMCEpollEvent *event, int fd, events_t what, void *arg)
+{
+	return;
+}
+
+
+/* ------------------------------------------- */
+static int _create_dns_handler(struct AMCEpoll *base)
+{
+	int retCode = -1;
+	int callStat = 0;
+	struct sockaddr_in address;
+	socklen_t addrLen = sizeof(address);
+	struct AMCEpollEvent *newEvent = NULL;
+
+	int fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0) {
+		_LOG("Failed to create fd: %s", strerror(errno));
+		goto ERROR;
+	}
+	else {
+		_LOG("Created UDP fd: %d", fd);
+	}
+
+	callStat = AMCFd_MakeNonBlock(fd);
+	if (callStat < 0) {
+		goto ERROR;
+	}
+
+	callStat = AMCFd_MakeCloseOnExec(fd);
+	if (callStat < 0) {
+		goto ERROR;
+	}
+
+	address.sin_family = AF_INET;
+	address.sin_port = 0;		/* automatically assign a port */
+	address.sin_addr.s_addr = htonl(INADDR_ANY);
+	callStat = bind(fd, (struct sockaddr *)&address, sizeof(struct sockaddr_in));
+	if (callStat < 0) {
+		_LOG("Failed in bind(): %s", strerror(errno));
+		goto ERROR;
+	}
+
+	newEvent = AMCEpoll_NewEvent(fd, EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_EVENT_TIMEOUT, 
+								-1, _callback_dns, &g_dnsBuff);
+	if (NULL == newEvent) {
+		_LOG("Failed to create event: %s", strerror(errno));
+		goto ERROR;
+	}
+
+	callStat = AMCEpoll_AddEvent(base, newEvent);
+	if (callStat < 0) {
+		_LOG("Failed to add event: %s", strerror(errno));
+		goto ERROR;
+	}
+
+	callStat = getsockname(fd, (struct sockaddr *)&address, (socklen_t *)&addrLen);
+	if (0 == callStat) {
+		_LOG("Created UDP socket, binded at Port: %d", ntohs(address.sin_port));
+	}
+	else {
+		_LOG("Failed in getsockname(): %s", strerror(errno));
+	}
+
+	address.sin_family = AF_INET;
+	address.sin_port = 0;
+	inet_pton(AF_INET, "8.8.8.8", &(address.sin_addr));
+	callStat = AMCDns_WriteRequest(fd, "www.google.com.hk", (struct sockaddr *)&address, sizeof(address));
+	if (callStat < 0) {
+		_LOG("Failed to send DNS request: %s", strerror(errno));
+		goto ERROR;
+	}
+	
+	return 0;
+ERROR:
+	if (newEvent) {
+		AMCEpoll_DelAndFreeEvent(base, newEvent);
+		newEvent = NULL;
+	}
+	if (fd > 0) {
+		close(fd);
+		fd = -1;
+	}
+	return retCode;
+}
+
+
+
+
+#endif
+
+/********/
 #define __SERVER_PREPARATION
 #ifdef __SERVER_PREPARATION
 
 /* ------------------------------------------- */
-int _create_local_server(struct AMCEpoll *base)
+static int _create_local_server(struct AMCEpoll *base)
 {
 	int retCode = -1;
 	int callStat = 0;
@@ -531,6 +636,11 @@ int main(int argc, char* argv[])
 	}
 
 	callStat = _create_signal_handler(base, SIGINT);
+	if (callStat < 0) {
+		goto END;
+	}
+
+	callStat = _create_dns_handler(base);
 	if (callStat < 0) {
 		goto END;
 	}

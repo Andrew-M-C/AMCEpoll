@@ -77,7 +77,7 @@ struct AMCEpoll {
 
 /* tools */
 #define BITS_ANY_SET(val, bits)		(0 != ((val) & (bits)))
-#define BITS_ALL_SET(val, bits)		(bits == ((val) & (bits)))
+#define BITS_ALL_SET(val, bits)		((bits) == ((val) & (bits)))
 #define BITS_HAVE_INTRSET(bitA, bitB)	((bitA) != ((bitA) & (~(bitB))))		/* The two bits have intersetion */
 
 #define RETURN_ERR(err)	\
