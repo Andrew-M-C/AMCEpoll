@@ -490,6 +490,109 @@ ssize_t AMCFd_Write(int fd, const void *buff, size_t nbyte)
 }
 
 
+/* --------------------AMCFd_SendTo----------------------- */
+ssize_t AMCFd_SendTo(int fd, const void *buff, size_t nbyte, int flags, const struct sockaddr *to, socklen_t tolen)
+{
+	int err = 0;
+	ssize_t ret = 0;
+	ssize_t callStat = 0;
+	BOOL isDone = FALSE;
+
+	if (fd < 0) {
+		RETURN_ERR(EBADF);
+	}
+	if (NULL == buff) {
+		RETURN_ERR(EINVAL);
+	}
+	if (0 == nbyte) {
+		return 0;
+	}
+
+	do {
+		callStat = sendto(fd, buff + ret, nbyte - ret, flags, to, tolen);
+		if (callStat < 0) {
+			err = errno;
+			if (EINTR == errno) {
+				/* continue */
+			} else if (EAGAIN == errno) {
+				isDone = TRUE;
+			} else {
+				DEBUG("Fd %d error in sendto(): %s", strerror(err));
+				ret = (ret > 0) ? ret : -1;
+				isDone = TRUE;
+			}
+		}
+		else {
+			ret += callStat;
+			if (ret >= nbyte) {
+				isDone = TRUE;
+			}
+		}
+	}
+	while (FALSE == isDone);
+
+	return ret;
+}
+
+
+/* --------------------AMCFd_RecvFrom----------------------- */
+ssize_t AMCFd_RecvFrom(int fd, void *rawBuf, size_t nbyte, int flags, struct sockaddr *from, socklen_t *fromlen)
+{
+	int err = 0;
+	ssize_t callStat = 0;
+	ssize_t ret = 0;
+	uint8_t *buff = (uint8_t *)rawBuf;
+	BOOL isDone = FALSE;
+
+	if (fd < 0) {
+		RETURN_ERR(EBADF);
+	}
+	if (NULL == buff) {
+		RETURN_ERR(EINVAL);
+	}
+	if (0 == nbyte) {
+		return 0;
+	}
+
+	/* loop read */
+	do {
+		callStat = recvfrom(fd, buff + ret, nbyte - ret, flags, from, fromlen);
+		err = errno;
+
+		if (0 == callStat) {
+			/* EOF */
+			DEBUG("Fd %d EOF", fd);
+			//ret = 0;
+			isDone = TRUE;
+		}
+		else if (callStat < 0)
+		{
+			if (EINTR == err) {
+				/* continue */
+			} else if (EAGAIN == err) {
+				DEBUG("Fd %d EAGAIN", fd);
+				isDone = TRUE;
+			} else {
+				DEBUG("Fd %d error in recvfrom(): %s", strerror(err));
+				ret = -1;
+				isDone = TRUE;
+			}
+		}
+		else
+		{
+			ret += callStat;
+
+			if (ret >= nbyte) {
+				isDone = TRUE;
+			}
+		}
+	} while (FALSE == isDone);
+	// end of "while (FALSE == isDone)"
+
+	return ret;
+}
+
+
 
 #endif
 

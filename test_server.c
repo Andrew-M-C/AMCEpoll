@@ -443,6 +443,12 @@ static DNSBuffer_st g_dnsBuff;
 /* ------------------------------------------- */
 static void _callback_dns(struct AMCEpollEvent *event, int fd, events_t what, void *arg)
 {
+	uint8_t buff[2048];
+
+	_LOG("DNS callback");
+	AMCDns_RecvResponse(fd, buff, sizeof(buff));
+	
+	exit(1);
 	return;
 }
 
@@ -508,7 +514,13 @@ static int _create_dns_handler(struct AMCEpoll *base)
 	address.sin_family = AF_INET;
 	address.sin_port = 0;
 	inet_pton(AF_INET, "8.8.8.8", &(address.sin_addr));
-	callStat = AMCDns_WriteRequest(fd, "www.google.com.hk", (struct sockaddr *)&address, sizeof(address));
+	callStat = AMCDns_SendRequest(fd, "www.baidu.com", (struct sockaddr *)&address, sizeof(address));
+	if (callStat < 0) {
+		_LOG("Failed to send DNS request: %s", strerror(errno));
+		goto ERROR;
+	}
+
+	callStat = AMCDns_SendRequest(fd, "www.baidu.com", (struct sockaddr *)&address, sizeof(address));
 	if (callStat < 0) {
 		_LOG("Failed to send DNS request: %s", strerror(errno));
 		goto ERROR;

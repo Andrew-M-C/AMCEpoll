@@ -29,6 +29,7 @@
 
 /********/
 /* headers */
+#include <stdlib.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 
@@ -59,7 +60,9 @@
 /* functions */
 
 int 
-	AMCDns_WriteRequest(int fd, const char *domain, const struct sockaddr * to, socklen_t toLen);
+	AMCDns_SendRequest(int fd, const char *domain, const struct sockaddr * to, socklen_t toLen);
+ssize_t 
+	AMCDns_RecvResponse(int fd, void *buff, size_t len);
 
 
 #endif

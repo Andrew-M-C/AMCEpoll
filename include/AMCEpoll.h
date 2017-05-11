@@ -33,6 +33,8 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 /********/
 /* data types */
@@ -103,6 +105,10 @@ ssize_t
 	AMCFd_Read(int fd, void *buff, size_t nbyte);
 ssize_t 
 	AMCFd_Write(int fd, const void *buff, size_t nbyte);
+ssize_t 
+	AMCFd_SendTo(int fd, const void *buff, size_t nbyte, int flags, const struct sockaddr *to, socklen_t tolen);
+ssize_t 
+	AMCFd_RecvFrom(int fd, void *buff, size_t nbyte, int flags, struct sockaddr *from, socklen_t *fromlen);
 
 
 #endif
