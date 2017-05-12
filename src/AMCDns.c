@@ -350,7 +350,7 @@ static ssize_t _dns_resolve_RR(uint8_t *pDNS, uint8_t *pRR, char domain[DNS_DOMA
 	// TODO: print text out
 	char cname[DNS_DOMAIN_LEN_MAX + 1] = "";
 
-	_DNS_DB("Start resolve RR at 0x%04x", (unsigned int)(pRR - pDNS));
+	//_DNS_DB("Start resolve RR at 0x%04x", (unsigned int)(pRR - pDNS));
 
 	/* resolve name */
 	{
@@ -480,6 +480,26 @@ static BOOL _dns_check_package_integrity(uint8_t *data, ssize_t len)
 		data += thisLen;
 		len -= thisLen;
 		ansRRs--;
+	}
+
+	/* read auth RRs */
+	while((authRRs > 0) && (len > 0))
+	{
+		size_t thisLen = _dns_resolve_RR(pDNS, data, domain, NULL);
+
+		data += thisLen;
+		len -= thisLen;
+		authRRs--;
+	}
+
+	/* read additional RRs */
+	while((addiRRs > 0) && (len > 0))
+	{
+		size_t thisLen = _dns_resolve_RR(pDNS, data, domain, NULL);
+
+		data += thisLen;
+		len -= thisLen;
+		addiRRs--;
 	}
 
 	/* return */
@@ -630,7 +650,7 @@ static int _dns_INET4_send(int fd, const char *domain, const struct sockaddr_in 
 
 #ifdef _DNS_DEBUG_FLAG
 	{
-		char addr[IPV4_STR_LEN + 1];
+		char addr[IPV4_STR_LEN_MAX + 1];
 		inet_ntop(AF_INET, (const void *)(&(dnsSrv.sin_addr)), addr, sizeof(addr));
 		_DNS_DB("Request URL \"%s\", DNS server %s", domain, addr);
 	}
@@ -739,7 +759,11 @@ ssize_t AMCDns_RecvResponse(int fd, void *buff, size_t len)
 	ret = AMCFd_RecvFrom(fd, buff, len, 0, &addr, &sockLen);
 	if (ret > 0) {
 		_dump_data(buff, ret);
-	} else {
+	} 
+	else if (0 == ret) {
+		_DNS_DB("EOF");
+	}
+	else {
 		_DNS_DB("Failed in recvfrom(): %s", strerror(errno));
 	}
 

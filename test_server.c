@@ -432,23 +432,23 @@ static void _callback_accept(struct AMCEpollEvent *theEvent, int fd, events_t ev
 #define __DNS_OPERATION
 #ifdef __DNS_OPERATION
 
-typedef struct {
-	size_t len;
-	uint8_t buff[2048];
-} DNSBuffer_st;
-
-static DNSBuffer_st g_dnsBuff;
-
 
 /* ------------------------------------------- */
 static void _callback_dns(struct AMCEpollEvent *event, int fd, events_t what, void *arg)
 {
 	uint8_t buff[2048];
+	struct AMCEpoll *base = (struct AMCEpoll *)arg;
 
-	_LOG("DNS callback");
-	AMCDns_RecvResponse(fd, buff, sizeof(buff));
+	if (what & EP_EVENT_READ) {
+		_LOG("DNS read");
+		AMCDns_RecvResponse(fd, buff, sizeof(buff));
+		AMCEpoll_LoopExit(base);
+	}
+	if (what & EP_EVENT_FREE) {
+		_LOG("DNS free, close fd %d", fd);
+		close(fd);
+	}
 	
-	exit(1);
 	return;
 }
 
@@ -491,7 +491,7 @@ static int _create_dns_handler(struct AMCEpoll *base)
 	}
 
 	newEvent = AMCEpoll_NewEvent(fd, EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_EVENT_TIMEOUT, 
-								-1, _callback_dns, &g_dnsBuff);
+								-1, _callback_dns, base);
 	if (NULL == newEvent) {
 		_LOG("Failed to create event: %s", strerror(errno));
 		goto ERROR;

@@ -40,7 +40,8 @@
 #define DNS_DOMAIN_LEN_MAX	255
 #define DNS_DOMAIN_PART_LEN_MAX	63
 
-#define IPV4_STR_LEN		15
+#define IPV4_STR_LEN_MAX		15
+#define IPV6_STR_LEN_MAX		45	/* 8000:0000:0000:0000:0123:4567:192.168.168.168, this is the maximum length of an IPv6 string */
 
 #ifndef NULL
 #ifndef _DO_NOT_DEFINE_NULL
