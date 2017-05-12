@@ -348,14 +348,16 @@ static ssize_t _dns_resolve_RR(uint8_t *pDNS, uint8_t *pRR, char domain[DNS_DOMA
 	RRHeader_st rrHeaders;
 
 	// TODO: print text out
+	char para[DNS_DOMAIN_LEN_MAX + 1] = "";
 	char cname[DNS_DOMAIN_LEN_MAX + 1] = "";
+	char ipv6[IPV6_STR_LEN_MAX + 1] = "";
 
 	//_DNS_DB("Start resolve RR at 0x%04x", (unsigned int)(pRR - pDNS));
 
 	/* resolve name */
 	{
-		len += _dns_resolve_name(pDNS, pRR, domain, TRUE);
-		_DNS_DB("Start domain: %s", domain);
+		len += _dns_resolve_name(pDNS, pRR, para, TRUE);
+		//_DNS_DB("Start domain: %s", para);
 	}
 
 	/* resolve headers */
@@ -377,18 +379,20 @@ static ssize_t _dns_resolve_RR(uint8_t *pDNS, uint8_t *pRR, char domain[DNS_DOMA
 			_DNS_DB("Unsupported Type %d", rrHeaders.type);
 			break;
 		case DNS_RR_TYPE_AAAA:
-			_DNS_DB("Unsupported Type AAAA");
+			//_DNS_DB("Unsupported Type AAAA");
+			inet_ntop(AF_INET6, pRR, ipv6, sizeof(ipv6));
+			_DNS_DB("%s - IPv6 %s", para, ipv6);
 			break;
 		case DNS_RR_TYPE_A:
-			_DNS_DB("Got IPv4 %u.%u.%u.%u", (pRR + len)[0], (pRR + len)[1], (pRR + len)[2], (pRR + len)[3]);
+			_DNS_DB("%s - IPv4 %u.%u.%u.%u", para, (pRR + len)[0], (pRR + len)[1], (pRR + len)[2], (pRR + len)[3]);
 			break;
 		case DNS_RR_TYPE_CNAME:
 			_dns_resolve_name(pDNS, pRR + len, cname, TRUE);
-			_DNS_DB("Got CNAME: %s", cname);
+			_DNS_DB("%s - CNAME: %s", para, cname);
 			break;
 		case DNS_RR_TYPE_NS:
 			_dns_resolve_name(pDNS, pRR + len, cname, TRUE);
-			_DNS_DB("Got name server: %s", cname);
+			_DNS_DB("%s - name server: %s", para, cname);
 			break;
 		}
 
@@ -413,7 +417,7 @@ static ssize_t _dns_resolve_query(uint8_t *pDNS, uint8_t *pQuery, char name[DNS_
 	/* resolve name */
 	{
 		len += _dns_resolve_name(pDNS, pQuery, name, TRUE);
-		_DNS_DB("Start domain: %s", name);
+		//_DNS_DB("Start domain: %s", name);
 	}
 
 	/* resolve headers */
@@ -462,44 +466,57 @@ static BOOL _dns_check_package_integrity(uint8_t *data, ssize_t len)
 	}
 
 	/* read queries */
-	while ((quesRRs > 0) && (len > 0))
+	if (quesRRs > 0)
 	{
-		size_t thisLen = _dns_resolve_query(pDNS, data, domain, NULL);
+		_DNS_DB("Queries:");
+		do {
+			size_t thisLen = _dns_resolve_query(pDNS, data, domain, NULL);
 
-		_DNS_DB("query length: 0x%02x", (int)thisLen);
-		data += thisLen;
-		len -= thisLen;
-		quesRRs--;
+			_DNS_DB("%s", domain);
+			data += thisLen;
+			len -= thisLen;
+			quesRRs--;
+			
+		} while ((quesRRs > 0) && (len > 0));
 	}
 
 	/* read answers */
-	while ((ansRRs > 0) && (len > 0))
+	if (ansRRs > 0)
 	{
-		size_t thisLen = _dns_resolve_RR(pDNS, data, domain, NULL);
+		_DNS_DB("Answers:");
+		do {
+			size_t thisLen = _dns_resolve_RR(pDNS, data, domain, NULL);
 
-		data += thisLen;
-		len -= thisLen;
-		ansRRs--;
+			data += thisLen;
+			len -= thisLen;
+			ansRRs--;
+		} while ((ansRRs > 0) && (len > 0));
 	}
 
 	/* read auth RRs */
-	while((authRRs > 0) && (len > 0))
+	if (authRRs > 0)
 	{
-		size_t thisLen = _dns_resolve_RR(pDNS, data, domain, NULL);
+		_DNS_DB("Authority RRs:");
+		do {
+			size_t thisLen = _dns_resolve_RR(pDNS, data, domain, NULL);
 
-		data += thisLen;
-		len -= thisLen;
-		authRRs--;
+			data += thisLen;
+			len -= thisLen;
+			authRRs--;
+		} while((authRRs > 0) && (len > 0));
 	}
 
 	/* read additional RRs */
-	while((addiRRs > 0) && (len > 0))
+	if (addiRRs > 0)
 	{
-		size_t thisLen = _dns_resolve_RR(pDNS, data, domain, NULL);
+		_DNS_DB("Additional RRs:");
+		do {
+			size_t thisLen = _dns_resolve_RR(pDNS, data, domain, NULL);
 
-		data += thisLen;
-		len -= thisLen;
-		addiRRs--;
+			data += thisLen;
+			len -= thisLen;
+			addiRRs--;
+		} while((addiRRs > 0) && (len > 0));
 	}
 
 	/* return */
