@@ -30,6 +30,7 @@
 /********/
 /* headers */
 #include <stdlib.h>
+#include <time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 
@@ -43,19 +44,15 @@
 #define IPV4_STR_LEN_MAX		15
 #define IPV6_STR_LEN_MAX		45	/* 8000:0000:0000:0000:0123:4567:192.168.168.168, this is the maximum length of an IPv6 string */
 
-#ifndef NULL
-#ifndef _DO_NOT_DEFINE_NULL
-#define NULL	((void*)0)
-#endif
-#endif
+struct AMCDnsResult {
+	struct AMCDnsResult *next;
+	time_t ttl;
+	char *name;
+	char *cname;
+	char *ipv4;
+	char *ipv6;
+};
 
-#ifndef BOOL
-#ifndef _DO_NOT_DEFINE_BOOL
-#define BOOL	int
-#define FALSE	0
-#define TRUE	(!(FALSE))
-#endif
-#endif
 
 /********/
 /* functions */
@@ -66,8 +63,10 @@ int
 	AMCDns_GetDefaultServer(struct sockaddr *dns, int index);
 int 
 	AMCDns_SendRequest(int fd, const char *domain, const struct sockaddr * to, socklen_t toLen);
-ssize_t 
-	AMCDns_RecvResponse(int fd, void *buff, size_t len);
+struct AMCDnsResult *
+	AMCDns_RecvAndResolve(int fd, struct sockaddr *from);
+int 
+	AMCDns_FreeResult(struct AMCDnsResult *obj);
 
 
 #endif

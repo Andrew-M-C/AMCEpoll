@@ -432,17 +432,57 @@ static void _callback_accept(struct AMCEpollEvent *theEvent, int fd, events_t ev
 #define __DNS_OPERATION
 #ifdef __DNS_OPERATION
 
+static const char *g_testDNS = "www.tplinkcloud.com";
+
 
 /* ------------------------------------------- */
 static void _callback_dns(struct AMCEpollEvent *event, int fd, events_t what, void *arg)
 {
-	uint8_t buff[2048];
 	struct AMCEpoll *base = (struct AMCEpoll *)arg;
 
-	if (what & EP_EVENT_READ) {
-		_LOG("DNS read");
-		AMCDns_RecvResponse(fd, buff, sizeof(buff));
-		AMCEpoll_LoopExit(base);
+	if (what & EP_EVENT_READ)
+	{
+		struct AMCDnsResult *result = NULL;
+
+		result = AMCDns_RecvAndResolve(fd, NULL);
+		if (result)
+		{
+			struct AMCDnsResult *next = result;
+
+			while(next)
+			{
+				if (next->ipv4) {
+					_LOG("<IPv4> %s -> %s, TTL %d", next->name, next->ipv4, (int)(next->ttl));
+				} else if (next->ipv6) {
+					_LOG("<IPv6> %s -> %s, TTL %d", next->name, next->ipv6, (int)(next->ttl));
+				} else if (next->cname) {
+					_LOG("<NAME> %s -> %s, TTL %d", next->name, next->cname, (int)(next->ttl));
+				}
+				next = next->next;
+			}
+
+			AMCDns_FreeResult(result);
+			result = NULL;
+
+			AMCEpoll_LoopExit(base);
+		}
+		else {
+			static int count = 0;
+			struct sockaddr_in address;
+
+			if (++count >= 5) {
+				_LOG("Failed to search for %s", g_testDNS);
+				AMCEpoll_LoopExit(base);
+			}
+			else {
+				_LOG("No result available: %s", strerror(errno));
+				address.sin_family = AF_INET;
+				address.sin_port = 0;
+				inet_pton(AF_INET, "8.8.8.8", &(address.sin_addr));
+				
+				AMCDns_SendRequest(fd, g_testDNS, (struct sockaddr *)&address, sizeof(address));
+			}			
+		}
 	}
 	if (what & EP_EVENT_FREE) {
 		_LOG("DNS free, close fd %d", fd);
@@ -513,18 +553,13 @@ static int _create_dns_handler(struct AMCEpoll *base)
 
 	if (AMCDns_GetDefaultServer((struct sockaddr *)(&address), 0) < 0)
 	{
+		_LOG("Failed to get DNS server");
 		address.sin_family = AF_INET;
 		address.sin_port = 0;
 		inet_pton(AF_INET, "8.8.8.8", &(address.sin_addr));
 	}
 	
-	callStat = AMCDns_SendRequest(fd, "www.baidu.com", (struct sockaddr *)&address, sizeof(address));
-	if (callStat < 0) {
-		_LOG("Failed to send DNS request: %s", strerror(errno));
-		goto ERROR;
-	}
-
-	callStat = AMCDns_SendRequest(fd, "www.baidu.com", (struct sockaddr *)&address, sizeof(address));
+	callStat = AMCDns_SendRequest(fd, g_testDNS, (struct sockaddr *)&address, sizeof(address));
 	if (callStat < 0) {
 		_LOG("Failed to send DNS request: %s", strerror(errno));
 		goto ERROR;

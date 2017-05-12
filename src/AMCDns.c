@@ -37,8 +37,10 @@
 #include <string.h>
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 
 #define _DNS_DEBUG_FLAG
 
@@ -77,12 +79,28 @@
 #endif
 
 
+#ifndef NULL
+#ifndef _DO_NOT_DEFINE_NULL
+#define NULL	((void*)0)
+#endif
+#endif
+
+#ifndef BOOL
+#ifndef _DO_NOT_DEFINE_BOOL
+#define BOOL	int
+#define FALSE	0
+#define TRUE	(!(FALSE))
+#endif
+#endif
+
+
 #define _BITS_ANY_SET(val, bits)		(0 != ((val) & (bits)))
 #define _BITS_ALL_SET(val, bits)		((bits) == ((val) & (bits)))
 #define _BITS_SET(val, bits)			((val) |= (bits))
 #define _BITS_CLR(val, bits)			((val) &= ~(bits))
 
 #define _DNS_RESOLV_FILE			"/etc/resolv.conf"
+#define _RANDOM_FILE				"/dev/random"
 
 
 typedef struct {
@@ -151,6 +169,8 @@ enum {
 
 static inline size_t _copy_uint16(void *dst, const void *src);
 static inline size_t _copy_uint32(void *dst, const void *src);
+static uint16_t _dns_get_reply_code(uint16_t flags);
+static uint16_t _random_uint16(void);
 
 #endif
 
@@ -345,15 +365,11 @@ static ssize_t _dns_resolve_name(uint8_t *pDNS, uint8_t *pName, char *domain, BO
 
 
 /* --------------------_dns_resolve_RR----------------------- */
-static ssize_t _dns_resolve_RR(uint8_t *pDNS, uint8_t *pRR, char domain[DNS_DOMAIN_LEN_MAX + 1], int *rrTypeOut)
+static ssize_t _dns_resolve_RR(uint8_t *pDNS, uint8_t *pRR, 
+			char para[DNS_DOMAIN_LEN_MAX + 1], char name[DNS_DOMAIN_LEN_MAX + 1], int *rrTypeOut, time_t *ttl)
 {
 	ssize_t len = 0;
 	RRHeader_st rrHeaders;
-
-	// TODO: print text out
-	char para[DNS_DOMAIN_LEN_MAX + 1] = "";
-	char cname[DNS_DOMAIN_LEN_MAX + 1] = "";
-	char ipv6[IPV6_STR_LEN_MAX + 1] = "";
 
 	//_DNS_DB("Start resolve RR at 0x%04x", (unsigned int)(pRR - pDNS));
 
@@ -381,25 +397,33 @@ static ssize_t _dns_resolve_RR(uint8_t *pDNS, uint8_t *pRR, char domain[DNS_DOMA
 		default:
 			_DNS_DB("Unsupported Type %d", rrHeaders.type);
 			break;
+
 		case DNS_RR_TYPE_AAAA:
-			//_DNS_DB("Unsupported Type AAAA");
-			inet_ntop(AF_INET6, pRR, ipv6, sizeof(ipv6));
-			_DNS_DB("%s - IPv6 %s", para, ipv6);
+			inet_ntop(AF_INET6, pRR, name, DNS_DOMAIN_LEN_MAX);
+			_DNS_DB("%s - IPv6 %s", para, name);
 			break;
+
 		case DNS_RR_TYPE_A:
+			sprintf(name, "%u.%u.%u.%u", (pRR + len)[0], (pRR + len)[1], (pRR + len)[2], (pRR + len)[3]);
 			_DNS_DB("%s - IPv4 %u.%u.%u.%u", para, (pRR + len)[0], (pRR + len)[1], (pRR + len)[2], (pRR + len)[3]);
 			break;
+
 		case DNS_RR_TYPE_CNAME:
-			_dns_resolve_name(pDNS, pRR + len, cname, TRUE);
-			_DNS_DB("%s - CNAME: %s", para, cname);
+			_dns_resolve_name(pDNS, pRR + len, name, TRUE);
+			_DNS_DB("%s - CNAME: %s", para, name);
 			break;
+
 		case DNS_RR_TYPE_NS:
-			_dns_resolve_name(pDNS, pRR + len, cname, TRUE);
-			_DNS_DB("%s - name server: %s", para, cname);
+			_dns_resolve_name(pDNS, pRR + len, name, TRUE);
+			_DNS_DB("%s - name server: %s", para, name);
 			break;
 		}
 
 		len += rrHeaders.length;
+
+		if (ttl) {
+			*ttl = (time_t)(rrHeaders.ttl);
+		}
 
 		if (rrTypeOut) {
 			*rrTypeOut = (int)(rrHeaders.type);
@@ -437,30 +461,144 @@ static ssize_t _dns_resolve_query(uint8_t *pDNS, uint8_t *pQuery, char name[DNS_
 }
 
 
-/* --------------------_dns_check_package_integrity----------------------- */
-// TODO: deprecated
-static BOOL _dns_check_package_integrity(uint8_t *data, ssize_t len)
+/* --------------------_dns_resolve_and_return_answers----------------------- */
+ struct AMCDnsResult *_dns_resolve_and_return_answers(uint8_t *pDNS, uint8_t *pAns, size_t ansCount, size_t *availCountOut)
 {
+	/* local variables */
+	struct AMCDnsResult *ret = NULL;
+	struct AMCDnsResult *next = NULL;
+
+	char para[DNS_DOMAIN_LEN_MAX + 1];
+	char value[DNS_DOMAIN_LEN_MAX + 1];
+	int rrType;
+
+	size_t index = 0;
+	size_t availCount = 0;
+
+	/* resolve the whole answer */
+	for (index = 0; index < ansCount; index ++)
+	{
+		size_t len = 0;
+		time_t ttl = 0;
+		pAns += _dns_resolve_RR(pDNS, pAns, para, value, &rrType, &ttl);
+
+		switch(rrType)
+		{
+		case DNS_RR_TYPE_A:
+		case DNS_RR_TYPE_AAAA:
+		case DNS_RR_TYPE_CNAME:
+			if (NULL == ret) {
+				ret = malloc(sizeof(struct AMCDnsResult));
+				if (NULL == ret) {
+					_DNS_DB("Failed in malloc: %s", strerror(errno));
+					return NULL;
+				}
+				else {
+					availCount ++;
+					next = ret;
+				}
+			}
+			else {
+				next->next = malloc(sizeof(struct AMCDnsResult));
+				if (NULL == next->next) {
+					_DNS_DB("Failed in malloc: %s", strerror(errno));
+					continue;												/* !!!!!! */
+				}
+				else {
+					availCount ++;
+					next = next->next;
+				}
+			}
+
+			memset(next, 0, sizeof(*next));
+			len = strlen(para) + 1;
+			next->ttl = ttl;
+			next->name = malloc(len);
+			if (next->name) {
+				memcpy(next->name, para, len);
+			}
+			break;
+		default:
+			_DNS_DB("Invalid type");
+			break;
+		}
+
+		switch(rrType)
+		{
+		case DNS_RR_TYPE_A:
+			len = strlen(value) + 1;
+			next->ipv4 = malloc(len);
+			if (next->ipv4) {
+				memcpy(next->ipv4, value, len);
+			}
+			break;
+		case DNS_RR_TYPE_AAAA:
+			len = strlen(value) + 1;
+			next->ipv6 = malloc(len);
+			if (next->ipv6) {
+				memcpy(next->ipv6, value, len);
+			}
+			break;
+		case DNS_RR_TYPE_CNAME:
+			len = strlen(value) + 1;
+			next->cname = malloc(len);
+			if (next->cname) {
+				memcpy(next->cname, value, len);
+			}
+			break;
+		default:
+			break;
+		}
+	}
+
+	/* return */
+	_DNS_DB("Return %d RRs", (int)availCount);
+	if (availCountOut) {
+		*availCountOut = availCount;
+	}
+	return ret;
+}
+
+
+/* --------------------_dns_resolve----------------------- */
+struct AMCDnsResult *_dns_resolve(uint8_t *pDNS, size_t len, size_t *ansCount)
+{
+	struct AMCDnsResult *ret = NULL;
+	char name[DNS_DOMAIN_LEN_MAX + 1] = "";
+	uint8_t *data = pDNS;
+
 	size_t quesRRs = 0;
 	size_t ansRRs = 0;
+	
+#ifdef _DNS_DEBUG_FLAG
+	char para[DNS_DOMAIN_LEN_MAX + 1] = "";
 	size_t authRRs = 0;
 	size_t addiRRs = 0;
-	uint8_t *pDNS = data;
+#endif
 
-	char domain[DNS_DOMAIN_LEN_MAX + 1] = "";
+	*ansCount = 0;
 
 	/* read DNS header */
 	if (len < _DNS_HEADER_LENGTH) {
-		return FALSE;
+		return NULL;
 	} else {
 		DNSHeader_st header;
+		uint16_t replyCode = 0;
 
 		memcpy(&header, data, _DNS_HEADER_LENGTH);
-		
+
+		replyCode = ntohs(header.flags);
 		quesRRs = ntohs(header.questions);
 		ansRRs  = ntohs(header.answer_RRs);
+#ifdef _DNS_DEBUG_FLAG
 		authRRs = ntohs(header.authority_RRs);
 		addiRRs = ntohs(header.additional_RRs);
+#endif
+		replyCode = _dns_get_reply_code(ntohs(replyCode));
+		if (1 != replyCode) {
+			_DNS_DB("Get DNS failed, code %d", (int)replyCode);
+			return NULL;
+		}
 
 		_DNS_DB("Got %d question(s)", (int)quesRRs);
 
@@ -473,9 +611,9 @@ static BOOL _dns_check_package_integrity(uint8_t *data, ssize_t len)
 	{
 		_DNS_DB("Queries:");
 		do {
-			size_t thisLen = _dns_resolve_query(pDNS, data, domain, NULL);
+			size_t thisLen = _dns_resolve_query(pDNS, data, name, NULL);
 
-			_DNS_DB("%s", domain);
+			_DNS_DB("%s", name);
 			data += thisLen;
 			len -= thisLen;
 			quesRRs--;
@@ -486,22 +624,16 @@ static BOOL _dns_check_package_integrity(uint8_t *data, ssize_t len)
 	/* read answers */
 	if (ansRRs > 0)
 	{
-		_DNS_DB("Answers:");
-		do {
-			size_t thisLen = _dns_resolve_RR(pDNS, data, domain, NULL);
-
-			data += thisLen;
-			len -= thisLen;
-			ansRRs--;
-		} while ((ansRRs > 0) && (len > 0));
+		ret = _dns_resolve_and_return_answers(pDNS, data, ansRRs, ansCount);
 	}
 
+#ifdef _DNS_DEBUG_FLAG
 	/* read auth RRs */
 	if (authRRs > 0)
 	{
 		_DNS_DB("Authority RRs:");
 		do {
-			size_t thisLen = _dns_resolve_RR(pDNS, data, domain, NULL);
+			size_t thisLen = _dns_resolve_RR(pDNS, data, para, name, NULL, NULL);
 
 			data += thisLen;
 			len -= thisLen;
@@ -514,18 +646,18 @@ static BOOL _dns_check_package_integrity(uint8_t *data, ssize_t len)
 	{
 		_DNS_DB("Additional RRs:");
 		do {
-			size_t thisLen = _dns_resolve_RR(pDNS, data, domain, NULL);
+			size_t thisLen = _dns_resolve_RR(pDNS, data, para, name, NULL, NULL);
 
 			data += thisLen;
 			len -= thisLen;
 			addiRRs--;
 		} while((addiRRs > 0) && (len > 0));
 	}
+#endif
 
 	/* return */
-	return TRUE;
+	return ret;
 }
-
 
 
 #endif
@@ -552,6 +684,23 @@ static inline size_t _copy_uint32(void *dst, const void *src)
 	((uint8_t *)dst)[2] =( (uint8_t *)src)[2];
 	((uint8_t *)dst)[3] =( (uint8_t *)src)[3];
 	return 2;
+}
+
+
+/* --------------------_random_uint16----------------------- */
+static uint16_t _random_uint16()
+{
+	uint16_t ret = 0;
+	int fd = open(_RANDOM_FILE, O_RDONLY);
+	if (fd < 0) {
+		ret = (uint16_t)rand();
+	}
+	else {
+		read(fd, &ret, sizeof(ret));
+		close(fd);
+	}
+
+	return ret;
 }
 
 
@@ -618,6 +767,7 @@ static uint16_t _dns_gen_req_flags()
 {
 	uint16_t ret = 0;
 	_BITS_SET(ret, (DNS_OPCODE_INQUIRY & 0x0F) << 11);
+	_BITS_SET(ret, (1 << 8));		/* need recursion */
 	return ret;
 }
 
@@ -701,9 +851,9 @@ static size_t _dns_append_req_data(uint8_t *buff, int type, const char *name, of
 
 
 /* --------------------_dns_get_reply_code----------------------- */
-static uint8_t _dns_get_reply_code(int flags)
+static uint16_t _dns_get_reply_code(uint16_t flags)
 {
-	return (uint8_t)(flags & 0x0F);
+	return (uint16_t)(flags & 0x0F);
 }
 
 #endif
@@ -738,7 +888,7 @@ static int _dns_INET4_send(int fd, const char *domain, const struct sockaddr_in 
 	{
 		DNSHeader_st header;
 
-		header.transaction_ID = htons(0x1234);		// TODO:
+		header.transaction_ID = _random_uint16();
 		header.flags = htons(_dns_gen_req_flags());
 		header.questions = htons(1);		/* IPv4 only */
 		header.answer_RRs = 0;
@@ -778,6 +928,7 @@ static int _dns_INET4_send(int fd, const char *domain, const struct sockaddr_in 
 /* --------------------_dns_INET6_send----------------------- */
 static int _dns_INET6_send(int fd, const char *domain, const struct sockaddr_in6 *to, socklen_t toLen)
 {
+	// TODO:
 	RETURN_ERR(ENOSYS);
 }
 
@@ -843,7 +994,7 @@ int AMCDns_GetDefaultServer(struct sockaddr *dns, int index)
 					if (dnsHitCount == index)
 					{
 						char *addrStr = line + sizeof(nameserver);
-						int callStat = 0;
+						int isOK = 0;
 
 						_DNS_DB("Hit name server: %s", addrStr);
 						if (strstr(addrStr, ":"))
@@ -852,7 +1003,7 @@ int AMCDns_GetDefaultServer(struct sockaddr *dns, int index)
 							struct sockaddr_in6 *addr = (struct sockaddr_in6 *)dns;
 							addr->sin6_family = AF_INET6;
 							addr->sin6_port = htons(DNS_SERVER_PORT);
-							callStat = inet_pton(AF_INET6, addrStr, &(addr->sin6_addr));
+							isOK = inet_pton(AF_INET6, addrStr, &(addr->sin6_addr));
 						}
 						else
 						{
@@ -860,16 +1011,13 @@ int AMCDns_GetDefaultServer(struct sockaddr *dns, int index)
 							struct sockaddr_in *addr  = (struct sockaddr_in *)dns;
 							addr->sin_family = AF_INET;
 							addr->sin_port = htons(DNS_SERVER_PORT);
-							callStat = inet_pton(AF_INET, addrStr, &(addr->sin_addr));
+							isOK = inet_pton(AF_INET, addrStr, &(addr->sin_addr));
 						}
 
-						if (0 == callStat) {
-							isDone = TRUE;
+						if (isOK) {
 							err = 0;
-						}
-						else {
-							isDone = TRUE;
-							err = errno;
+						} else {
+							err = EIO;
 						}
 					}
 					else {
@@ -933,35 +1081,79 @@ int AMCDns_SendRequest(int fd, const char *domain, const struct sockaddr *to, so
 }
 
 
-/* --------------------AMCDns_RecvResponse----------------------- */
-ssize_t AMCDns_RecvResponse(int fd, void *buff, size_t len)
+/* --------------------AMCDns_RecvAndResolve----------------------- */
+struct AMCDnsResult *AMCDns_RecvAndResolve(int fd, struct sockaddr *from)
 {
-	ssize_t ret = 0;
+	struct AMCDnsResult *ret = NULL;
 	struct sockaddr addr;
+	size_t count = 0;
+	ssize_t len = 0;
 	socklen_t sockLen = sizeof(addr);
+	uint8_t buff[UDP_PACKAGE_LEN_MAX * 2];
 
-	/* parameter check */
-	if ((fd > 0) && buff && len) {
+	if (fd > 0) {
 		/* OK */
 	} else {
-		RETURN_ERR(EINVAL);
+		errno = EINVAL;
+		goto ENDS;
 	}
 
 	/* recvfrom */
-	ret = AMCFd_RecvFrom(fd, buff, len, 0, &addr, &sockLen);
-	if (ret > 0) {
-		_dump_data(buff, ret);
+	len = AMCFd_RecvFrom(fd, buff, sizeof(buff), 0, &addr, &sockLen);
+	if (len > 0) {
+		_DNS_DB("Read data:");
+		_dump_data(buff, len);
 	} 
-	else if (0 == ret) {
+	else if (0 == len) {
+		errno = 0;
 		_DNS_DB("EOF");
+		goto ENDS;
 	}
 	else {
 		_DNS_DB("Failed in recvfrom(): %s", strerror(errno));
+		goto ENDS;
 	}
 
-	/* check if DNS data ends */
-	_dns_check_package_integrity((uint8_t *)buff, ret);
+	/* resolve */
+	ret = _dns_resolve(buff, len, &count);
+
+	/* return */
+ENDS:
+	if (from) {
+		memcpy(from, &addr, sockLen);
+	}
 	return ret;
+}
+
+
+/* --------------------AMCDns_FreeResult----------------------- */
+int AMCDns_FreeResult(struct AMCDnsResult *obj)
+{
+	if (obj) {
+		struct AMCDnsResult *next;
+		while(obj)
+		{
+			next = obj->next;
+			if (obj->name) {
+				free(obj->name);
+			}
+			if (obj->cname) {
+				free(obj->cname);
+			}
+			if (obj->ipv4) {
+				free(obj->ipv4);
+			}
+			if (obj->ipv6) {
+				free(obj->ipv6);
+			}
+			free(obj);
+			obj = next;
+		}
+		return 0;
+	}
+	else {
+		RETURN_ERR(EINVAL);
+	}
 }
 
 
