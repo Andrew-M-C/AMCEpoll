@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <ctype.h>
 #include <errno.h>
 #include <arpa/inet.h>
 #include <sys/types.h>
@@ -80,6 +81,8 @@
 #define _BITS_ALL_SET(val, bits)		((bits) == ((val) & (bits)))
 #define _BITS_SET(val, bits)			((val) |= (bits))
 #define _BITS_CLR(val, bits)			((val) &= ~(bits))
+
+#define _DNS_RESOLV_FILE			"/etc/resolv.conf"
 
 
 typedef struct {
@@ -529,8 +532,8 @@ static BOOL _dns_check_package_integrity(uint8_t *data, ssize_t len)
 
 
 /********/
-#define __INTERNAL_PACKAGING_FUNCTIONS
-#ifdef __INTERNAL_PACKAGING_FUNCTIONS
+#define __INTERNAL_MISC_TOOLS
+#ifdef __INTERNAL_MISC_TOOLS
 
 /* --------------------_copy_uint16----------------------- */
 static inline size_t _copy_uint16(void *dst, const void *src)
@@ -551,6 +554,64 @@ static inline size_t _copy_uint32(void *dst, const void *src)
 	return 2;
 }
 
+
+/* --------------------_trim_str----------------------- */
+/* remove all heading and trailing blanks and replace all "isspace()" as ' ' */
+static size_t _trim_str(char *str)
+{
+	char *srh = str;	/* current examing from */
+	char *dst = str;	/* current copy target */
+	BOOL isLastBlank = FALSE;
+
+	if ('\0' == *srh) {
+		return 0;
+	}
+
+	/* remove leading blanks */
+	while (isspace(*srh)) {
+		srh ++;
+	}
+
+	/* remove inner mutiple blanks */
+	while ('\0' != *srh)
+	{
+		if (isspace(*srh))
+		{
+			if (isLastBlank) {
+				/* do nothing */
+			}
+			else {
+				*dst = ' ';
+				dst ++;
+				isLastBlank = TRUE;
+			}
+		}
+		else
+		{
+			isLastBlank = FALSE;
+			*dst = *srh;
+			dst ++;
+		}
+
+		srh ++;
+	}
+
+	/* return */
+	if (isLastBlank) {
+		dst --;
+	}
+	*dst = '\0';
+	dst ++;
+	return (size_t)(dst - str);
+}
+
+
+#endif
+
+
+/********/
+#define __INTERNAL_PACKAGING_FUNCTIONS
+#ifdef __INTERNAL_PACKAGING_FUNCTIONS
 
 /* --------------------_dns_gen_req_flags----------------------- */
 static uint16_t _dns_gen_req_flags()
@@ -727,6 +788,120 @@ static int _dns_INET6_send(int fd, const char *domain, const struct sockaddr_in6
 /********/
 #define __PUBLIC_FUNCTIONS
 #ifdef __PUBLIC_FUNCTIONS
+
+/* --------------------AMCDns_Debug----------------------- */
+void AMCDns_Debug()
+{
+	struct sockaddr dns;
+
+	AMCDns_GetDefaultServer(&dns, 0);
+}
+
+
+/* --------------------AMCDns_GetDefaultServer----------------------- */
+int AMCDns_GetDefaultServer(struct sockaddr *dns, int index)
+{
+	if (NULL == dns) {
+		RETURN_ERR(EINVAL);
+	}
+	else if (index < 0) {
+		RETURN_ERR(EINVAL);
+	}
+	else
+	{
+		BOOL isDone = FALSE;
+		int err = 0;
+		size_t dnsHitCount = 0;
+		char line[DNS_DOMAIN_LEN_MAX * 2 + 1] = "";
+		size_t lineLen = 0;
+		const char nameserver[] = "nameserver";
+		FILE *resoFile = NULL;
+
+		/* open system config file */
+		resoFile = fopen(_DNS_RESOLV_FILE, "r");
+		if (NULL == resoFile) {
+			err = errno;
+			goto ENDS;
+		}
+
+		/* read data */
+		err = ENOENT;		/* preset as NOT FOUND status */
+		do {
+			if (NULL == fgets(line, sizeof(line), resoFile)) {
+				isDone = TRUE;
+			}
+			else {
+				lineLen = _trim_str(line);
+				//_DNS_DB("Get DNS resolv: %s", line);
+
+				if (lineLen <= sizeof(nameserver)) {
+					/* line is too short, it can't be */
+				}
+				else if (0 == memcmp(line, nameserver, sizeof(nameserver) - 1))
+				{
+					/* DNS config hit! */
+					if (dnsHitCount == index)
+					{
+						char *addrStr = line + sizeof(nameserver);
+						int callStat = 0;
+
+						_DNS_DB("Hit name server: %s", addrStr);
+						if (strstr(addrStr, ":"))
+						{
+							/* IPv6 address */
+							struct sockaddr_in6 *addr = (struct sockaddr_in6 *)dns;
+							addr->sin6_family = AF_INET6;
+							addr->sin6_port = htons(DNS_SERVER_PORT);
+							callStat = inet_pton(AF_INET6, addrStr, &(addr->sin6_addr));
+						}
+						else
+						{
+							/* IPv4 address */
+							struct sockaddr_in *addr  = (struct sockaddr_in *)dns;
+							addr->sin_family = AF_INET;
+							addr->sin_port = htons(DNS_SERVER_PORT);
+							callStat = inet_pton(AF_INET, addrStr, &(addr->sin_addr));
+						}
+
+						if (0 == callStat) {
+							isDone = TRUE;
+							err = 0;
+						}
+						else {
+							isDone = TRUE;
+							err = errno;
+						}
+					}
+					else {
+						dnsHitCount ++;
+						/* continue searching for next DNS server IP address */
+					}
+				}
+				else {
+					/* not the line we are searching */
+				}
+				// end of: "else (0 == memcmp(line, nameserver, sizeof(nameserver) - 1))"
+			}
+			// end of: "else (NULL == fgets(line, sizeof(line), resoFile))"
+		}
+		while (FALSE == isDone);
+		
+
+		/* return */
+ENDS:
+		if (resoFile) {
+			fclose(resoFile);
+			resoFile = NULL;
+		}
+
+		if (0 == err) {
+			return 0;
+		} else {
+			RETURN_ERR(err);
+		}
+	}
+}
+
 
 /* --------------------AMCDns_SendRequest----------------------- */
 int AMCDns_SendRequest(int fd, const char *domain, const struct sockaddr *to, socklen_t toLen)

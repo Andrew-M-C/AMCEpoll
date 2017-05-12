@@ -60,6 +60,10 @@
 /********/
 /* functions */
 
+void 
+	AMCDns_Debug(void);
+int 
+	AMCDns_GetDefaultServer(struct sockaddr *dns, int index);
 int 
 	AMCDns_SendRequest(int fd, const char *domain, const struct sockaddr * to, socklen_t toLen);
 ssize_t 

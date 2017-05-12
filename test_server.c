@@ -511,9 +511,13 @@ static int _create_dns_handler(struct AMCEpoll *base)
 		_LOG("Failed in getsockname(): %s", strerror(errno));
 	}
 
-	address.sin_family = AF_INET;
-	address.sin_port = 0;
-	inet_pton(AF_INET, "172.31.1.1", &(address.sin_addr));
+	if (AMCDns_GetDefaultServer((struct sockaddr *)(&address), 0) < 0)
+	{
+		address.sin_family = AF_INET;
+		address.sin_port = 0;
+		inet_pton(AF_INET, "8.8.8.8", &(address.sin_addr));
+	}
+	
 	callStat = AMCDns_SendRequest(fd, "www.baidu.com", (struct sockaddr *)&address, sizeof(address));
 	if (callStat < 0) {
 		_LOG("Failed to send DNS request: %s", strerror(errno));
