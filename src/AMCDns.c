@@ -298,16 +298,17 @@ void _dump_data(const void *pData, const size_t size)
 
 /* --------------------_dns_resolve_name----------------------- */
 static ssize_t _dns_resolve_name(uint8_t *pDNS, uint8_t *pName, char *domain, BOOL domainIsEmpty)
-{_DNS_DB("MARK 0x%02x", *pName);
+{
+	//_DNS_DB("MARK 0x%02x, Offset 0x%04x, First byte 0x%02u", *pName, (unsigned int)(pName - pDNS), *pName);
 	/* truncated label */
 	if ('\0' == *pName)
-	{_DNS_MARK();
+	{
 		domain[0] = '\0';
 		return sizeof(uint8_t);
 	}
 	/* label */
 	else if (_BITS_ANY_SET(*pName, 0xC0))
-	{_DNS_MARK();
+	{
 		uint16_t offset;
 
 		_copy_uint16(&offset, pName);
@@ -325,15 +326,16 @@ static ssize_t _dns_resolve_name(uint8_t *pDNS, uint8_t *pName, char *domain, BO
 	}
 	/* actual domain */
 	else
-	{_DNS_MARK();
+	{
 		uint8_t len = *pName;
 		ssize_t ret = len;
 
-		if (domainIsEmpty) {_DNS_DB("len = %d", (int)len);
+		if (domainIsEmpty) {
+			ret ++;
 			memcpy(domain, pName + 1, len);
 			ret += _dns_resolve_name(pDNS, pName + len + 1, domain + len, FALSE);
 		}
-		else {_DNS_MARK();
+		else {
 			ret ++;
 			domain[0] = '.';
 			memcpy(domain + 1, pName + 1, len);
@@ -353,6 +355,8 @@ static ssize_t _dns_resolve_RR(uint8_t *pDNS, uint8_t *pRR, char domain[DNS_DOMA
 
 	// TODO: print text out
 	char cname[DNS_DOMAIN_LEN_MAX + 1] = "";
+
+	_DNS_DB("Start resolve RR at 0x%04x", (unsigned int)(pRR - pDNS));
 
 	/* resolve name */
 	{
@@ -468,7 +472,7 @@ static BOOL _dns_check_package_integrity(uint8_t *data, ssize_t len)
 	{
 		size_t thisLen = _dns_resolve_query(pDNS, data, domain, NULL);
 
-		_DNS_DB("query length: %d", (int)thisLen);
+		_DNS_DB("query length: 0x%02x", (int)thisLen);
 		data += thisLen;
 		len -= thisLen;
 		quesRRs--;
