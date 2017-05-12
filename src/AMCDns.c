@@ -315,13 +315,7 @@ static ssize_t _dns_resolve_name(uint8_t *pDNS, uint8_t *pName, char *domain, BO
 		offset = ntohs(offset);
 		_BITS_CLR(offset, 0xC000);
 
-		if (domainIsEmpty) {
-			_dns_resolve_name(pDNS, pDNS + offset, domain, TRUE);
-		}
-		else {
-			domain[0] = '.';
-			_dns_resolve_name(pDNS, pDNS + offset, domain + 1, FALSE);
-		}
+		_dns_resolve_name(pDNS, pDNS + offset, domain, domainIsEmpty);
 		return sizeof(uint16_t);
 	}
 	/* actual domain */
