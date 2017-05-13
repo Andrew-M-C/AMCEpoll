@@ -26,6 +26,7 @@
 ********************************************************************************/
 
 #include "AMCEpoll.h"
+#include "AMCDns.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -428,11 +429,169 @@ static void _callback_accept(struct AMCEpollEvent *theEvent, int fd, events_t ev
 #endif
 
 /********/
+#define __DNS_OPERATION
+#ifdef __DNS_OPERATION
+
+static const char *g_testDNS = "www.steampowered.com";
+
+
+/* ------------------------------------------- */
+static void _callback_dns(struct AMCEpollEvent *event, int fd, events_t what, void *arg)
+{
+	struct AMCEpoll *base = (struct AMCEpoll *)arg;
+
+	if (what & EP_EVENT_READ)
+	{
+		struct AMCDnsResult *result = NULL;
+
+		result = AMCDns_RecvAndResolve(fd, NULL, TRUE);
+		if (result)
+		{
+			struct AMCDnsResult *next = result;
+			_LOG("Got DNS result:");
+
+			while(next)
+			{
+				if (next->ipv4) {
+					_LOG("<IPv4> %s -> %s, TTL %d", next->name, next->ipv4, (int)(next->ttl));
+				} else if (next->ipv6) {
+					_LOG("<IPv6> %s -> %s, TTL %d", next->name, next->ipv6, (int)(next->ttl));
+				} else if (next->cname) {
+					_LOG("<NAME> %s -> %s, TTL %d", next->name, next->cname, (int)(next->ttl));
+				} else if (next->namesvr) {
+					_LOG("<SERV> %s -> %s, TTL %d", next->name, next->namesvr, (int)(next->ttl));
+				}
+				next = next->next;
+			}
+
+			AMCDns_FreeResult(result);
+			result = NULL;
+
+			AMCEpoll_LoopExit(base);
+		}
+		else {
+			static int count = 0;
+			struct sockaddr_in address;
+
+			if (++count >= 5) {
+				_LOG("Failed to search for %s", g_testDNS);
+				AMCEpoll_LoopExit(base);
+			}
+			else {
+				_LOG("No result available: %s", strerror(errno));
+				address.sin_family = AF_INET;
+				address.sin_port = 0;
+				inet_pton(AF_INET, "8.8.8.8", &(address.sin_addr));
+				
+				AMCDns_SendRequest(fd, g_testDNS, (struct sockaddr *)&address, sizeof(address));
+			}			
+		}
+	}
+	if (what & EP_EVENT_FREE) {
+		_LOG("DNS free, close fd %d", fd);
+		close(fd);
+	}
+	
+	return;
+}
+
+
+/* ------------------------------------------- */
+static int _create_dns_handler(struct AMCEpoll *base)
+{
+	int retCode = -1;
+	int callStat = 0;
+	struct sockaddr_in address;
+	socklen_t addrLen = sizeof(address);
+	struct AMCEpollEvent *newEvent = NULL;
+
+	int fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0) {
+		_LOG("Failed to create fd: %s", strerror(errno));
+		goto ERROR;
+	}
+	else {
+		_LOG("Created UDP fd: %d", fd);
+	}
+
+	callStat = AMCFd_MakeNonBlock(fd);
+	if (callStat < 0) {
+		goto ERROR;
+	}
+
+	callStat = AMCFd_MakeCloseOnExec(fd);
+	if (callStat < 0) {
+		goto ERROR;
+	}
+
+	address.sin_family = AF_INET;
+	address.sin_port = 0;		/* automatically assign a port */
+	address.sin_addr.s_addr = htonl(INADDR_ANY);
+	callStat = bind(fd, (struct sockaddr *)&address, sizeof(struct sockaddr_in));
+	if (callStat < 0) {
+		_LOG("Failed in bind(): %s", strerror(errno));
+		goto ERROR;
+	}
+
+	newEvent = AMCEpoll_NewEvent(fd, EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_EVENT_TIMEOUT, 
+								-1, _callback_dns, base);
+	if (NULL == newEvent) {
+		_LOG("Failed to create event: %s", strerror(errno));
+		goto ERROR;
+	}
+
+	callStat = AMCEpoll_AddEvent(base, newEvent);
+	if (callStat < 0) {
+		_LOG("Failed to add event: %s", strerror(errno));
+		goto ERROR;
+	}
+
+	callStat = getsockname(fd, (struct sockaddr *)&address, (socklen_t *)&addrLen);
+	if (0 == callStat) {
+		_LOG("Created UDP socket, binded at Port: %d", ntohs(address.sin_port));
+	}
+	else {
+		_LOG("Failed in getsockname(): %s", strerror(errno));
+	}
+
+	if (AMCDns_GetDefaultServer((struct sockaddr *)(&address), 0) < 0)
+	{
+		_LOG("Failed to get DNS server");
+		address.sin_family = AF_INET;
+		address.sin_port = 0;
+		inet_pton(AF_INET, "8.8.8.8", &(address.sin_addr));
+	}
+	
+	callStat = AMCDns_SendRequest(fd, g_testDNS, (struct sockaddr *)&address, sizeof(address));
+	if (callStat < 0) {
+		_LOG("Failed to send DNS request: %s", strerror(errno));
+		goto ERROR;
+	}
+	
+	return 0;
+ERROR:
+	if (newEvent) {
+		AMCEpoll_DelAndFreeEvent(base, newEvent);
+		newEvent = NULL;
+	}
+	if (fd > 0) {
+		close(fd);
+		fd = -1;
+	}
+	return retCode;
+}
+
+
+
+
+#endif
+
+/********/
 #define __SERVER_PREPARATION
 #ifdef __SERVER_PREPARATION
 
 /* ------------------------------------------- */
-int _create_local_server(struct AMCEpoll *base)
+static int _create_local_server(struct AMCEpoll *base)
 {
 	int retCode = -1;
 	int callStat = 0;
@@ -531,6 +690,11 @@ int main(int argc, char* argv[])
 	}
 
 	callStat = _create_signal_handler(base, SIGINT);
+	if (callStat < 0) {
+		goto END;
+	}
+
+	callStat = _create_dns_handler(base);
 	if (callStat < 0) {
 		goto END;
 	}
