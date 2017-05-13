@@ -432,7 +432,7 @@ static void _callback_accept(struct AMCEpollEvent *theEvent, int fd, events_t ev
 #define __DNS_OPERATION
 #ifdef __DNS_OPERATION
 
-static const char *g_testDNS = "www.tplinkcloud.com";
+static const char *g_testDNS = "www.steampowered.com";
 
 
 /* ------------------------------------------- */
@@ -444,10 +444,11 @@ static void _callback_dns(struct AMCEpollEvent *event, int fd, events_t what, vo
 	{
 		struct AMCDnsResult *result = NULL;
 
-		result = AMCDns_RecvAndResolve(fd, NULL);
+		result = AMCDns_RecvAndResolve(fd, NULL, TRUE);
 		if (result)
 		{
 			struct AMCDnsResult *next = result;
+			_LOG("Got DNS result:");
 
 			while(next)
 			{
@@ -457,6 +458,8 @@ static void _callback_dns(struct AMCEpollEvent *event, int fd, events_t what, vo
 					_LOG("<IPv6> %s -> %s, TTL %d", next->name, next->ipv6, (int)(next->ttl));
 				} else if (next->cname) {
 					_LOG("<NAME> %s -> %s, TTL %d", next->name, next->cname, (int)(next->ttl));
+				} else if (next->namesvr) {
+					_LOG("<SERV> %s -> %s, TTL %d", next->name, next->namesvr, (int)(next->ttl));
 				}
 				next = next->next;
 			}

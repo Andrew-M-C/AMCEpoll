@@ -48,23 +48,31 @@ struct AMCDnsResult {
 	struct AMCDnsResult *next;
 	time_t ttl;
 	char *name;
-	char *cname;
 	char *ipv4;
 	char *ipv6;
+	char *cname;
+	char *namesvr;
 };
+
+
+#ifndef BOOL
+#ifndef _DO_NOT_DEFINE_BOOL
+#define BOOL	int
+#define FALSE	0
+#define TRUE	(!(FALSE))
+#endif
+#endif
 
 
 /********/
 /* functions */
 
-void 
-	AMCDns_Debug(void);
 int 
 	AMCDns_GetDefaultServer(struct sockaddr *dns, int index);
 int 
 	AMCDns_SendRequest(int fd, const char *domain, const struct sockaddr * to, socklen_t toLen);
 struct AMCDnsResult *
-	AMCDns_RecvAndResolve(int fd, struct sockaddr *from);
+	AMCDns_RecvAndResolve(int fd, struct sockaddr *from, BOOL detail);
 int 
 	AMCDns_FreeResult(struct AMCDnsResult *obj);
 
