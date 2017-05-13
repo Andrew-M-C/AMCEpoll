@@ -467,7 +467,8 @@ static void _callback_dns(struct AMCEpollEvent *event, int fd, events_t what, vo
 			AMCDns_FreeResult(result);
 			result = NULL;
 
-			AMCEpoll_LoopExit(base);
+			//AMCEpoll_LoopExit(base);
+			AMCEpoll_DelAndFreeEvent(base, event);
 		}
 		else {
 			static int count = 0;
@@ -475,7 +476,8 @@ static void _callback_dns(struct AMCEpollEvent *event, int fd, events_t what, vo
 
 			if (++count >= 5) {
 				_LOG("Failed to search for %s", g_testDNS);
-				AMCEpoll_LoopExit(base);
+				//AMCEpoll_LoopExit(base);
+				AMCEpoll_DelAndFreeEvent(base, event);
 			}
 			else {
 				_LOG("No result available: %s", strerror(errno));
