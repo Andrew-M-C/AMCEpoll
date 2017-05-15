@@ -128,8 +128,9 @@ enum {
 };
 
 enum {
-	DNS_REPLYCODE_OK                     = 1,
-	DNS_REPLYCODE_FMT_ERR                = 2,
+	DNS_REPLYCODE_NO_ERROR               = 0,
+	DNS_REPLYCODE_FMT_ERR                = 1,
+	DNS_REPLYCODE_SRV_ERR                = 2,
 	DNS_REPLYCODE_NAME_NOT_EXIST         = 3,
 	DNS_REPLYCODE_REJECTED               = 5,
 	DNS_REPLYCODE_NAME_SHOULD_NOT_APPEAR = 6,
@@ -579,18 +580,66 @@ static struct AMCDnsResult *_dns_resolve(uint8_t *pDNS, size_t len, BOOL detail)
 	} else {
 		DNSHeader_st header;
 		uint16_t replyCode = 0;
+		BOOL isOK = FALSE;
 
 		memcpy(&header, data, _DNS_HEADER_LENGTH);
+		_DNS_DB("Get DNS reply flags: 0x%04x", (int)ntohs(header.flags));
 
-		replyCode = ntohs(header.flags);
 		quesRRs = ntohs(header.questions);
 		ansRRs  = ntohs(header.answer_RRs);
 		authRRs = ntohs(header.authority_RRs);
 		addiRRs = ntohs(header.additional_RRs);
-		replyCode = _dns_get_reply_code(ntohs(replyCode));
-		if (DNS_REPLYCODE_OK != replyCode) {
+		replyCode = _dns_get_reply_code(ntohs(header.flags));
+		switch (replyCode)
+		{
+		case DNS_REPLYCODE_NO_ERROR:
+			isOK = TRUE;
+			break;
+		case DNS_REPLYCODE_FMT_ERR:
+			errno = ENOEXEC;
+			break;
+		case DNS_REPLYCODE_SRV_ERR:
+			errno = EBUSY;
+			break;
+		case DNS_REPLYCODE_NAME_NOT_EXIST:
+			errno = ENXIO;
+			break;
+		case DNS_REPLYCODE_REJECTED:
+			errno = EACCES;
+			break;
+		case DNS_REPLYCODE_NAME_SHOULD_NOT_APPEAR:
+			errno = ENOENT;
+			break;
+		case DNS_REPLYCODE_RR_NOT_EXIST:
+			errno = ENXIO;
+			break;
+		case DNS_REPLYCODE_RR_INQUIRY_FAIL:
+			errno = ECHILD;
+			break;
+		case DNS_REPLYCODE_SRV_AUTH_FAIL:
+			errno = EACCES;
+			break;
+		case DNS_REPLYCODE_NAME_OUT_OF_AREA:
+			errno = ENFILE;
+			break;
+		default:
+			errno = EIO;
+			break;
+		}
+
+		if (FALSE == isOK) {
 			_DNS_DB("Get DNS failed, code %d", (int)replyCode);
 			return NULL;
+		}
+		else {
+			// TODO:
+			/* examine other flags */
+			uint16_t flags = ntohs(header.flags);
+			if (_BITS_ANY_SET(flags, (1 << 10))) {
+				_DNS_DB("Server is authoritative.");
+			} else {
+				_DNS_DB("Server is NOT authoritative.");
+			}
 		}
 
 		_DNS_DB("Got %d question(s)", (int)quesRRs);
@@ -860,6 +909,7 @@ static uint16_t _dns_get_reply_code(uint16_t flags)
 	return (uint16_t)(flags & 0x0F);
 }
 
+
 #endif
 
 
@@ -893,7 +943,7 @@ static ssize_t _sock_sendto(int fd, const void *buff, size_t nbyte, int flags, c
 			} else if (EAGAIN == errno) {
 				isDone = TRUE;
 			} else {
-				_DNS_DB("Fd %d error in sendto(): %s", strerror(errno));
+				_DNS_DB("Fd %d error in sendto(): %s", fd, strerror(errno));
 				ret = (ret > 0) ? ret : -1;
 				isDone = TRUE;
 			}
@@ -949,7 +999,7 @@ static ssize_t _sock_recvfrom(int fd, void *rawBuf, size_t nbyte, int flags, str
 				_DNS_DB("Fd %d EAGAIN", fd);
 				isDone = TRUE;
 			} else {
-				_DNS_DB("Fd %d error in recvfrom(): %s", strerror(err));
+				_DNS_DB("Fd %d error in recvfrom(): %s", fd, strerror(err));
 				ret = -1;
 				isDone = TRUE;
 			}
