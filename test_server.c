@@ -432,7 +432,9 @@ static void _callback_accept(struct AMCEpollEvent *theEvent, int fd, events_t ev
 #define __DNS_OPERATION
 #ifdef __DNS_OPERATION
 
-static const char *g_testDNS = "www.steampowered.com";
+static size_t g_preferDNSIndex = 0;
+static const char *g_testDNS = "gmail.com";
+static const char *g_altDNSServer = "8.8.8.8";
 
 
 /* ------------------------------------------- */
@@ -453,13 +455,13 @@ static void _callback_dns(struct AMCEpollEvent *event, int fd, events_t what, vo
 			while(next)
 			{
 				if (next->ipv4) {
-					_LOG("<IPv4> %s -> %s, TTL %d", next->name, next->ipv4, (int)(next->ttl));
+					_LOG("<IPv4> \"%s\" -> %s, TTL %d", next->name, next->ipv4, (int)(next->ttl));
 				} else if (next->ipv6) {
-					_LOG("<IPv6> %s -> %s, TTL %d", next->name, next->ipv6, (int)(next->ttl));
+					_LOG("<IPv6> \"%s\" -> %s, TTL %d", next->name, next->ipv6, (int)(next->ttl));
 				} else if (next->cname) {
-					_LOG("<NAME> %s -> %s, TTL %d", next->name, next->cname, (int)(next->ttl));
+					_LOG("<NAME> \"%s\" -> %s, TTL %d", next->name, next->cname, (int)(next->ttl));
 				} else if (next->namesvr) {
-					_LOG("<SERV> %s -> %s, TTL %d", next->name, next->namesvr, (int)(next->ttl));
+					_LOG("<SERV> \"%s\" -> %s, TTL %d", next->name, next->namesvr, (int)(next->ttl));
 				}
 				next = next->next;
 			}
@@ -483,7 +485,7 @@ static void _callback_dns(struct AMCEpollEvent *event, int fd, events_t what, vo
 				_LOG("No result available: %s", strerror(errno));
 				address.sin_family = AF_INET;
 				address.sin_port = 0;
-				inet_pton(AF_INET, "8.8.8.8", &(address.sin_addr));
+				inet_pton(AF_INET, g_altDNSServer, &(address.sin_addr));
 				
 				AMCDns_SendRequest(fd, g_testDNS, (struct sockaddr *)&address, sizeof(address));
 			}			
@@ -556,12 +558,12 @@ static int _create_dns_handler(struct AMCEpoll *base)
 		_LOG("Failed in getsockname(): %s", strerror(errno));
 	}
 
-	if (AMCDns_GetDefaultServer((struct sockaddr *)(&address), 0) < 0)
+	if (AMCDns_GetDefaultServer((struct sockaddr *)(&address), g_preferDNSIndex) < 0)
 	{
 		_LOG("Failed to get DNS server");
 		address.sin_family = AF_INET;
 		address.sin_port = 0;
-		inet_pton(AF_INET, "8.8.8.8", &(address.sin_addr));
+		inet_pton(AF_INET, g_altDNSServer, &(address.sin_addr));
 	}
 	
 	callStat = AMCDns_SendRequest(fd, g_testDNS, (struct sockaddr *)&address, sizeof(address));
