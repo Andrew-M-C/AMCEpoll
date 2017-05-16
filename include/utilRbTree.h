@@ -42,30 +42,36 @@ enum {
 	RbStatus_InitOK         = (1 << 0),
 	RbStatus_IsChecking     = (1 << 1),
 	RbStatus_AbortCheck     = (1 << 2),
-	RbStatus_BanHashFuncSet = (1 << 3),
 };
 
 // RB-tree key type
-typedef uint64_t key_t;
+typedef uint64_t RbKey_t;
 
 // hash function
-typedef key_t (*hash_func)(const char *key);
+typedef RbKey_t (*hash_func)(const char *key);
 
 // RB-tree. ALL data elements should be used internally
 struct UtilRbTree {
 	RbStatus_t         status;
 	size_t             count;
-	struct RbTreeNode *start;
+	struct RbTreeNode *nodes;
 	hash_func          hash_func;
 };
 
 // parameter for check callback
 typedef enum {
-	RbCheck_All           = 0,
-	RbCheck_Lower,
-	RbCheck_LowerEqual,
-	RbCheck_Greater,
-	RbCheck_GreaterEqual,
+	RbCheck_IncAll = 0,
+	RbCheck_DecAll,
+
+	RbCheck_IncLower,
+	RbCheck_IncLowerEqual,
+	RbCheck_DecLower,
+	RbCheck_DecLowerEqual,
+
+	RbCheck_DecGreater,
+	RbCheck_DecGreaterEuqal,
+	RbCheck_IncGreater,
+	RbCheck_IncGreaterEqual,
 
 	RbCheck_IllegalWay	// SHOULD placed in the end
 } RbCheck_t;
@@ -74,12 +80,24 @@ typedef enum {
 struct RbCheckPara {
 	struct UtilRbTree *tree;
 	RbCheck_t          how;
-	key_t              key;
+	RbKey_t            than;
+	RbKey_t            key;
 	void              *object;
 };
 
 // check function
 typedef void (*check_func)(const struct RbCheckPara *para, void *checkArg);
+
+// error codes
+enum {
+	RB_NO_ERROR    = 0,
+	RB_ERR_UNKNOWN = 256,
+	RB_ERR_ALREADY_INIT,
+	RB_ERR_NOT_INIT,
+	RB_ERR_NOT_EMPTY,
+	RB_ERR_NOT_CHECKING,
+	RB_ERR_RECURSIVE_CHECK,
+};
 
 
 
@@ -89,23 +107,25 @@ struct UtilRbTree *
 int 
 	utilRbTree_Destory(struct UtilRbTree *tree);
 int 
-	utilRbTree_SetHashFunc(struct UtilRbTree *tree, hash_func func);
-hash_func 
-	utilRbTree_GetHashFunc(const struct UtilRbTree *tree);
-int 
 	utilRbTree_Init(struct UtilRbTree *tree);
 int 
 	utilRbTree_Clean(struct UtilRbTree *tree);
 int 
-	utilRbTree_SetObject(struct UtilRbTree *tree, void *obj, key_t key, void **prevObj);
-void *
-	utilRbTree_GetObject(const struct UtilRbTree *tree, key_t key);
-void *
-	utilRbTree_DrainObject(struct UtilRbTree *tree, key_t key);
+	utilRbTree_SetHashFunc(struct UtilRbTree *tree, hash_func func);
+hash_func 
+	utilRbTree_GetHashFunc(const struct UtilRbTree *tree);
 int 
-	utilRbTree_CheckObjects(struct UtilRbTree *tree, RbCheck_t how, key_t target, void *checkArg);
+	utilRbTree_SetObject(struct UtilRbTree *tree, void *obj, RbKey_t key, void **prevObj);
+void *
+	utilRbTree_GetObject(const struct UtilRbTree *tree, RbKey_t key);
+void *
+	utilRbTree_DrainObject(struct UtilRbTree *tree, RbKey_t key);
+int 
+	utilRbTree_CheckObjects(struct UtilRbTree *tree, RbCheck_t how, RbKey_t than, check_func callback, void *checkArg);
 int 
 	utilRbTree_AbortCheck(struct UtilRbTree *tree);
+const char *
+	utilRbTree_StrError(int error);
 
 
 #endif
