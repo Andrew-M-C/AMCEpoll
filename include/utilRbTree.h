@@ -29,22 +29,83 @@
 
 /* headers */
 #include <stdint.h>
+#include <unistd.h>
 
 /* data definitions */
-/* all data structures should be used internally */
-struct UtilRbTree {
-	// TODO:
-	
+
+// Ahead declaration
+struct RbTreeNode;
+
+// RB-tree status code masks
+typedef unsigned int RbStatus_t;
+enum {
+	RbStatus_InitOK         = (1 << 0),
+	RbStatus_IsChecking     = (1 << 1),
+	RbStatus_AbortCheck     = (1 << 2),
+	RbStatus_BanHashFuncSet = (1 << 3),
 };
+
+// RB-tree key type
+typedef uint64_t key_t;
+
+// hash function
+typedef key_t (*hash_func)(const char *key);
+
+// RB-tree. ALL data elements should be used internally
+struct UtilRbTree {
+	RbStatus_t         status;
+	size_t             count;
+	struct RbTreeNode *start;
+	hash_func          hash_func;
+};
+
+// parameter for check callback
+typedef enum {
+	RbCheck_All           = 0,
+	RbCheck_Lower,
+	RbCheck_LowerEqual,
+	RbCheck_Greater,
+	RbCheck_GreaterEqual,
+
+	RbCheck_IllegalWay	// SHOULD placed in the end
+} RbCheck_t;
+
+// check callback parameter in order to shorten callback function length
+struct RbCheckPara {
+	struct UtilRbTree *tree;
+	RbCheck_t          how;
+	key_t              key;
+	void              *object;
+};
+
+// check function
+typedef void (*check_func)(const struct RbCheckPara *para, void *checkArg);
+
 
 
 /* public functions */
+struct UtilRbTree *
+	utilRbTree_New(void);
+int 
+	utilRbTree_Destory(struct UtilRbTree *tree);
+int 
+	utilRbTree_SetHashFunc(struct UtilRbTree *tree, hash_func func);
+hash_func 
+	utilRbTree_GetHashFunc(const struct UtilRbTree *tree);
 int 
 	utilRbTree_Init(struct UtilRbTree *tree);
 int 
 	utilRbTree_Clean(struct UtilRbTree *tree);
 int 
-	utilRbTree_SetObject(struct UtilRbTree *tree, void *obj, uint64_t key);
+	utilRbTree_SetObject(struct UtilRbTree *tree, void *obj, key_t key, void **prevObj);
+void *
+	utilRbTree_GetObject(const struct UtilRbTree *tree, key_t key);
+void *
+	utilRbTree_DrainObject(struct UtilRbTree *tree, key_t key);
+int 
+	utilRbTree_CheckObjects(struct UtilRbTree *tree, RbCheck_t how, key_t target, void *checkArg);
+int 
+	utilRbTree_AbortCheck(struct UtilRbTree *tree);
 
 
 #endif
