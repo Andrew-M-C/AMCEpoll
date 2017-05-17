@@ -47,15 +47,11 @@ enum {
 // RB-tree key type
 typedef uint64_t RbKey_t;
 
-// hash function
-typedef RbKey_t (*hash_func)(const char *key);
-
 // RB-tree. ALL data elements should be used internally
 struct UtilRbTree {
 	RbStatus_t         status;
 	size_t             count;
 	struct RbTreeNode *nodes;
-	hash_func          hash_func;
 };
 
 // parameter for check callback
@@ -97,6 +93,9 @@ enum {
 	RB_ERR_NOT_EMPTY,
 	RB_ERR_NOT_CHECKING,
 	RB_ERR_RECURSIVE_CHECK,
+	RB_ERR_INSERT_CONFLICT,
+
+	RB_ERR_BOUNDARY	// SHOULD placed in the end
 };
 
 
@@ -110,10 +109,6 @@ int
 	utilRbTree_Init(struct UtilRbTree *tree);
 int 
 	utilRbTree_Clean(struct UtilRbTree *tree);
-int 
-	utilRbTree_SetHashFunc(struct UtilRbTree *tree, hash_func func);
-hash_func 
-	utilRbTree_GetHashFunc(const struct UtilRbTree *tree);
 int 
 	utilRbTree_SetObject(struct UtilRbTree *tree, void *obj, RbKey_t key, void **prevObj);
 void *
