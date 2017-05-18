@@ -93,7 +93,9 @@ enum {
 	RB_ERR_NOT_EMPTY,
 	RB_ERR_NOT_CHECKING,
 	RB_ERR_RECURSIVE_CHECK,
+	RB_ERR_DURING_CHECK,
 	RB_ERR_INSERT_CONFLICT,
+	RB_ERR_NO_FOUND,
 
 	RB_ERR_BOUNDARY	// SHOULD placed in the end
 };
@@ -113,8 +115,8 @@ int
 	utilRbTree_SetObject(struct UtilRbTree *tree, void *obj, RbKey_t key, void **prevObj);
 void *
 	utilRbTree_GetObject(const struct UtilRbTree *tree, RbKey_t key);
-void *
-	utilRbTree_DrainObject(struct UtilRbTree *tree, RbKey_t key);
+int 
+	utilRbTree_DelObject(struct UtilRbTree *tree, RbKey_t key, void **prevObj);
 int 
 	utilRbTree_CheckObjects(struct UtilRbTree *tree, RbCheck_t how, RbKey_t than, check_func callback, void *checkArg);
 int 

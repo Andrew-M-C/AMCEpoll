@@ -141,6 +141,20 @@ static int _rb_err(int err)
 }
 
 
+/* --------------------_rb_initialized----------------------- */
+static inline BOOL _rb_initialized(struct UtilRbTree *tree)
+{
+	return _BITS_ALL_SET(tree->status, RbStatus_InitOK);
+}
+
+
+/* --------------------_rb_is_checking----------------------- */
+static inline BOOL _rb_is_checking(struct UtilRbTree *tree)
+{
+	return _BITS_ALL_SET(tree->status, RbStatus_IsChecking);
+}
+
+
 
 #endif
 
@@ -1235,10 +1249,36 @@ int utilRbTree_Clean(struct UtilRbTree *tree)
 
 
 /* --------------------utilRbTree_SetObject----------------------- */
-int utilRbTree_SetObject(struct UtilRbTree *tree, void *obj, RbKey_t key, void **prevObj)
+int utilRbTree_SetObject(struct UtilRbTree *tree, void *obj, RbKey_t key, void **prevObjOut)
 {
-	// TODO:
-	return _rb_err(ENOSYS);
+	void *prevObj = NULL;
+	int ret = 0;
+
+	if (NULL == tree) {
+		ret = _rb_err(EINVAL);
+	}
+	else if (FALSE == _rb_initialized(tree)) {
+		ret = _rb_err(RB_ERR_NOT_INIT);
+	}
+	else if (_rb_is_checking(tree)) {
+		ret = _rb_err(RB_ERR_DURING_CHECK);
+	}
+	else {
+		struct RbTreeNode *node = NULL;
+		node = _node_search(tree, key);
+		if (node) {
+			prevObj = node->obj;
+			node->obj = obj;
+		}
+		else {
+			ret = _rb_insert_node(tree, key, obj);
+		}
+	}
+
+	if (prevObjOut) {
+		*prevObjOut = prevObj;
+	}
+	return ret;
 }
 
 
@@ -1261,12 +1301,38 @@ void *utilRbTree_GetObject(const struct UtilRbTree *tree, RbKey_t key)
 }
 
 
-/* --------------------utilRbTree_DrainObject----------------------- */
-void *utilRbTree_DrainObject(struct UtilRbTree *tree, RbKey_t key)
+/* --------------------utilRbTree_DelObject----------------------- */
+int utilRbTree_DelObject(struct UtilRbTree *tree, RbKey_t key, void **prevObjOut)
 {
-	// TODO:
-	errno = ENOSYS;
-	return NULL;
+	void *prevObj = NULL;
+	int ret = 0;
+
+	if (NULL == tree) {
+		ret = _rb_err(EINVAL);
+	}
+	else if (FALSE == _rb_initialized(tree)) {
+		ret = _rb_err(RB_ERR_NOT_INIT);
+	}
+	else if (_rb_is_checking(tree)) {
+		ret = _rb_err(RB_ERR_DURING_CHECK);
+	}
+	else {
+		struct RbTreeNode *node = NULL;
+
+		node = _node_search(tree, key);
+		if (NULL == node) {
+			ret = _rb_err(RB_ERR_NO_FOUND);
+		}
+		else {
+			prevObj = node->obj;
+			ret = _rb_delete_node(tree, node);
+		}
+	}
+
+	if (prevObjOut) {
+		prevObjOut = prevObj;
+	}
+	return ret;
 }
 
 
@@ -1328,7 +1394,9 @@ const char *utilRbTree_StrError(int error)
 		"tree is not empty",
 		"tree is not checking",
 		"recursive check is forbidden",
+		"tree is checking",
 		"another object with given key exists",
+		"object not found",
 		
 		"illegal tree error"	// SHOULD placed in the end
 	};
