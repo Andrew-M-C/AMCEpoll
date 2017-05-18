@@ -364,7 +364,7 @@ int epEventFd_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 int epEventFd_Destroy(struct AMCEpollEvent *event)
 {
 	if (NULL == event) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	else {
 		epEventIntnl_InvokeUserFreeCallback(event, event->fd);
@@ -386,7 +386,7 @@ int epEventFd_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event,
 		return 0;
 	}
 	else {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 }
 

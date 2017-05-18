@@ -54,22 +54,6 @@
 #define UDP_PACKAGE_LEN_MAX		1480
 
 
-#ifndef RETURN_ERR
-#define RETURN_ERR(err)	\
-	do{\
-		if (err > 0) {\
-			errno = err;\
-			return (0 - err);\
-		} else if (err < 0) {\
-			errno = 0 - err;\
-			return err;\
-		} else {\
-			return -1;\
-		}\
-	}while(0)
-#endif
-
-
 #ifdef _DNS_DEBUG_FLAG
 #define _DNS_DB(fmt, args...)		printf("[DNS - %04ld] "fmt"\n", (long)__LINE__, ##args)
 #define _DNS_MARK()					_DNS_DB("--- MARK ---");
@@ -172,6 +156,23 @@ static uint16_t _random_uint16(void);
 /********/
 #define __DEBUG_FUNCTIONS
 #ifdef __DEBUG_FUNCTIONS
+
+/* --------------------_dns_err----------------------- */
+static int _dns_err(int err)
+{
+	if (0 == err) {
+		errno = 0;
+		return 0;
+	}
+
+	if (err < 0) {
+		err = -err;
+	}
+
+	errno = err;
+	return -err;
+}
+
 
 /* --------------------_dump_data----------------------- */
 #ifdef _DNS_DEBUG_FLAG
@@ -925,10 +926,10 @@ static ssize_t _sock_sendto(int fd, const void *buff, size_t nbyte, int flags, c
 	BOOL isDone = FALSE;
 
 	if (fd < 0) {
-		RETURN_ERR(EBADF);
+		return _dns_err(EBADF);
 	}
 	if (NULL == buff) {
-		RETURN_ERR(EINVAL);
+		return _dns_err(EINVAL);
 	}
 	if (0 == nbyte) {
 		return 0;
@@ -971,10 +972,10 @@ static ssize_t _sock_recvfrom(int fd, void *rawBuf, size_t nbyte, int flags, str
 	BOOL isDone = FALSE;
 
 	if (fd < 0) {
-		RETURN_ERR(EBADF);
+		return _dns_err(EBADF);
 	}
 	if (NULL == buff) {
-		RETURN_ERR(EINVAL);
+		return _dns_err(EINVAL);
 	}
 	if (0 == nbyte) {
 		return 0;
@@ -1078,7 +1079,7 @@ static int _dns_INET4_send(int fd, const char *domain, const struct sockaddr_in 
 	callStat = _sock_sendto(fd, buff, len, 0, (const struct sockaddr *)(&dnsSrv), sizeof(dnsSrv));
 	if (callStat < 0) {
 		_DNS_DB("Failed to send DNS request: %s", strerror(errno));
-		RETURN_ERR(errno);
+		return _dns_err(errno);
 	}
 	else {
 		_DNS_DB("DNS sent %ld bytes", (long)callStat);
@@ -1091,7 +1092,7 @@ static int _dns_INET4_send(int fd, const char *domain, const struct sockaddr_in 
 static int _dns_INET6_send(int fd, const char *domain, const struct sockaddr_in6 *to, socklen_t toLen)
 {
 	// TODO:
-	RETURN_ERR(ENOSYS);
+	return _dns_err(ENOSYS);
 }
 
 
@@ -1107,10 +1108,10 @@ static int _dns_INET6_send(int fd, const char *domain, const struct sockaddr_in6
 int AMCDns_GetDefaultServer(struct sockaddr *dns, int index)
 {
 	if (NULL == dns) {
-		RETURN_ERR(EINVAL);
+		return _dns_err(EINVAL);
 	}
 	else if (index < 0) {
-		RETURN_ERR(EINVAL);
+		return _dns_err(EINVAL);
 	}
 	else
 	{
@@ -1199,7 +1200,7 @@ ENDS:
 		if (0 == err) {
 			return 0;
 		} else {
-			RETURN_ERR(err);
+			return _dns_err(err);
 		}
 	}
 }
@@ -1212,10 +1213,10 @@ int AMCDns_SendRequest(int fd, const char *domain, const struct sockaddr *to, so
 		/* OK */
 	}
 	else if (strlen(domain) > DNS_DOMAIN_LEN_MAX) {
-		RETURN_ERR(ENAMETOOLONG);
+		return _dns_err(ENAMETOOLONG);
 	}
 	else {
-		RETURN_ERR(EINVAL);
+		return _dns_err(EINVAL);
 	}
 
 	switch(to->sa_family)
@@ -1227,7 +1228,7 @@ int AMCDns_SendRequest(int fd, const char *domain, const struct sockaddr *to, so
 		return _dns_INET6_send(fd, domain, (const struct sockaddr_in6 *)to, toLen);
 		break;
 	default:
-		RETURN_ERR(EFAULT);
+		return _dns_err(EFAULT);
 		break;
 	}
 
@@ -1305,7 +1306,7 @@ int AMCDns_FreeResult(struct AMCDnsResult *obj)
 		return 0;
 	}
 	else {
-		RETURN_ERR(EINVAL);
+		return _dns_err(EINVAL);
 	}
 }
 

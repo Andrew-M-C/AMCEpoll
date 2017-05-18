@@ -151,7 +151,7 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 
 	/* return */
 	if (base->base_status & EP_STAT_EPOLL_ERROR) {
-		RETURN_ERR(errCpy);
+		return ep_err(errCpy);
 	}
 	else {
 		return 0;
@@ -221,7 +221,7 @@ int AMCEpoll_Free(struct AMCEpoll *base)
 {
 	if (NULL == base) {
 		ERROR("Nil parameter");
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	else
 	{
@@ -322,7 +322,7 @@ int AMCEpoll_Dispatch(struct AMCEpoll *base)
 {
 	if (NULL == base) {
 		ERROR("Nil parameter");
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} 
 	else if (0 == cAssocArray_Size(base->all_events)) {
 		return 0;
@@ -338,7 +338,7 @@ int AMCEpoll_LoopExit(struct AMCEpoll *base)
 {
 	if (NULL == base) {
 		ERROR("Nil parameter");
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else {
 		base->base_status |= EP_STAT_SHOULD_EXIT;
 		return 0;
@@ -351,7 +351,7 @@ int AMCFd_MakeNonBlock(int fd)
 {
 	if (fd < 0) {
 		ERROR("Invalid file descriptor");
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	else {
 		int flags = fcntl(fd, F_GETFL, NULL);
@@ -362,7 +362,7 @@ int AMCFd_MakeNonBlock(int fd)
 		else {
 			int err = errno;
 			ERROR("Failed to set O_NONBLOCK for fd %d: %s", fd, strerror(err));
-			RETURN_ERR(err);
+			return ep_err(err);
 		}
 	}
 }
@@ -373,7 +373,7 @@ int AMCFd_MakeCloseOnExec(int fd)
 {
 	if (fd < 0) {
 		ERROR("Invalid file descriptor");
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	else {
 		int flags = fcntl(fd, F_GETFD, NULL);
@@ -384,7 +384,7 @@ int AMCFd_MakeCloseOnExec(int fd)
 		else {
 			int err = errno;
 			ERROR("Failed to set FD_CLOEXEC for fd %d: %s", fd, strerror(err));
-			RETURN_ERR(err);
+			return ep_err(err);
 		}
 	}
 }
@@ -400,10 +400,10 @@ ssize_t AMCFd_Read(int fd, void *rawBuf, size_t nbyte)
 	BOOL isDone = FALSE;
 
 	if (fd < 0) {
-		RETURN_ERR(EBADF);
+		return ep_err(EBADF);
 	}
 	if (NULL == buff) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	if (0 == nbyte) {
 		return 0;
@@ -458,10 +458,10 @@ ssize_t AMCFd_Write(int fd, const void *buff, size_t nbyte)
 	BOOL isDone = FALSE;
 
 	if (fd < 0) {
-		RETURN_ERR(EBADF);
+		return ep_err(EBADF);
 	}
 	if (NULL == buff) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	if (0 == nbyte) {
 		return 0;
@@ -503,10 +503,10 @@ ssize_t AMCFd_SendTo(int fd, const void *buff, size_t nbyte, int flags, const st
 	BOOL isDone = FALSE;
 
 	if (fd < 0) {
-		RETURN_ERR(EBADF);
+		return ep_err(EBADF);
 	}
 	if (NULL == buff) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	if (0 == nbyte) {
 		return 0;
@@ -549,10 +549,10 @@ ssize_t AMCFd_RecvFrom(int fd, void *rawBuf, size_t nbyte, int flags, struct soc
 	BOOL isDone = FALSE;
 
 	if (fd < 0) {
-		RETURN_ERR(EBADF);
+		return ep_err(EBADF);
 	}
 	if (NULL == buff) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	if (0 == nbyte) {
 		return 0;
@@ -634,7 +634,7 @@ int AMCFd_SockaddrToStr(const struct sockaddr *addr, char *buff, size_t buffSize
 		return ret;
 	}
 	else {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 }
 

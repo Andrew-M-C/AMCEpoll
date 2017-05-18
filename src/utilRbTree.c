@@ -135,8 +135,8 @@ static int _rb_err(int err)
 		return -err;
 	}
 	else {
-		errno = -err;
-		return err;
+		errno = err;
+		return -err;
 	}
 }
 

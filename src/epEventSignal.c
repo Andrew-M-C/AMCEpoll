@@ -656,7 +656,7 @@ static int epEventSignal_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEv
 		return 0;
 	}
 	else {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 }
 

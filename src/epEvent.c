@@ -75,11 +75,11 @@ int epEventIntnl_FreeEmptyEvent(struct AMCEpollEvent *event)
 int epEventIntnl_AttachToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
 	if (NULL == base) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else if (NULL == event) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else if ('\0' == event->key[0]) {
-		RETURN_ERR(EBADF);
+		return ep_err(EBADF);
 	} else {
 		int callStat = cAssocArray_AddValue(base->all_events, event->key, event);
 		if (callStat < 0) {
@@ -95,11 +95,11 @@ int epEventIntnl_AttachToBase(struct AMCEpoll *base, struct AMCEpollEvent *event
 int epEventIntnl_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
 	if (NULL == base) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else if (NULL == event) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else if ('\0' == event->key[0]) {
-		RETURN_ERR(EBADF);
+		return ep_err(EBADF);
 	} 
 	else {
 		struct AMCEpollEvent *eventInBase = cAssocArray_GetValue(base->all_events, event->key);
@@ -113,7 +113,7 @@ int epEventIntnl_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *eve
 			}
 		}
 		else {
-			RETURN_ERR(ENOENT);
+			return ep_err(ENOENT);
 		}
 	}
 }
@@ -123,9 +123,9 @@ int epEventIntnl_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *eve
 int epEventIntnl_InvokeUserCallback(struct AMCEpollEvent *event, int handler, events_t what)
 {
 	if (NULL == event) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else if (NULL == event->callback) {
-		RETURN_ERR(EBADF);
+		return ep_err(EBADF);
 	} else {
 		(event->callback)(event, handler, what, event->user_data);
 		return 0;
@@ -143,7 +143,7 @@ int epEventIntnl_InvokeUserFreeCallback(struct AMCEpollEvent *event, int handler
 		return 0;
 	}
 	else {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 }
 
@@ -187,11 +187,11 @@ struct AMCEpollEvent *epEvent_New(int fd, events_t what, long timeout, ev_callba
 int epEvent_Free(struct AMCEpollEvent *event)
 {
 	if (NULL == event) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	else if (NULL == event->free_func) {
 		CRIT("Event %p not init correctly", event);
-		RETURN_ERR(EBADF);
+		return ep_err(EBADF);
 	}
 	else {
 		return (event->free_func)(event);
@@ -220,11 +220,11 @@ const char * epEvent_GetKey(struct AMCEpollEvent *event)
 int epEvent_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
 	if (NULL == base) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else if (NULL == event) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else if ('\0' == event->attach_func) {
-		RETURN_ERR(EBADF);
+		return ep_err(EBADF);
 	} else {
 		return (event->attach_func)(base, event);
 	}
@@ -235,11 +235,11 @@ int epEvent_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 int epEvent_DelFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
 	if (NULL == base) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else if (NULL == event) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else if ('\0' == event->detach_func) {
-		RETURN_ERR(EBADF);
+		return ep_err(EBADF);
 	} else {
 		return (event->detach_func)(base, event);
 	}
@@ -250,9 +250,9 @@ int epEvent_DelFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 int epEvent_DelFromBaseAndFree(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
 	if (NULL == base) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else if (NULL == event) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	else {
 		int callStat = 0;
@@ -275,13 +275,13 @@ int epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, i
 {
 	if (0 == epollEvents) {
 		ERROR("Empty event for %p", event);
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else if (NULL == base) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else if (NULL == event) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else if ('\0' == event->invoke_func) {
-		RETURN_ERR(EBADF);
+		return ep_err(EBADF);
 	} else {
 		return (event->invoke_func)(base, event, epollEvents);
 	}

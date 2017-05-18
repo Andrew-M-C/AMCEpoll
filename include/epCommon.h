@@ -80,18 +80,8 @@ struct AMCEpoll {
 #define BITS_ALL_SET(val, bits)		((bits) == ((val) & (bits)))
 #define BITS_HAVE_INTRSET(bitA, bitB)	((bitA) != ((bitA) & (~(bitB))))		/* The two bits have intersetion */
 
-#define RETURN_ERR(err)	\
-	do{\
-		if (err > 0) {\
-			errno = err;\
-			return (0 - err);\
-		} else if (err < 0) {\
-			errno = 0 - err;\
-			return err;\
-		} else {\
-			return -1;\
-		}\
-	}while(0)
+/* function */
+int ep_err(int err);
 
 
 #endif
