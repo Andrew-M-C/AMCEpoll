@@ -51,6 +51,8 @@ typedef uint64_t RbKey_t;
 struct UtilRbTree {
 	RbStatus_t         status;
 	size_t             count;
+	size_t             alloc_size;
+	size_t             data_size;
 	struct RbTreeNode *nodes;
 };
 
@@ -78,7 +80,7 @@ struct RbCheckPara {
 	RbCheck_t          how;
 	RbKey_t            than;
 	RbKey_t            key;
-	void              *object;
+	const void        *data;
 };
 
 // check function
@@ -104,21 +106,25 @@ enum {
 
 /* public functions */
 struct UtilRbTree *
-	utilRbTree_New(void);
+	utilRbTree_New(size_t dataSize);
 int 
 	utilRbTree_Destory(struct UtilRbTree *tree);
 int 
-	utilRbTree_Init(struct UtilRbTree *tree);
+	utilRbTree_Init(struct UtilRbTree *tree, size_t dataSize);
 int 
 	utilRbTree_Clean(struct UtilRbTree *tree);
+size_t 
+	utilRbTree_GetDataSize(const struct UtilRbTree *tree);
 int 
-	utilRbTree_SetObject(struct UtilRbTree *tree, void *obj, RbKey_t key, void **prevObj);
-void *
-	utilRbTree_GetObject(const struct UtilRbTree *tree, RbKey_t key);
+	utilRbTree_SetData(struct UtilRbTree *tree, RbKey_t key, void *data, void *prevDataOut);
 int 
-	utilRbTree_DelObject(struct UtilRbTree *tree, RbKey_t key, void **prevObj);
+	utilRbTree_GetData(const struct UtilRbTree *tree, RbKey_t key, void *dataBuff);
 int 
-	utilRbTree_CheckObjects(struct UtilRbTree *tree, RbCheck_t how, RbKey_t than, check_func callback, void *checkArg);
+	utilRbTree_DelData(struct UtilRbTree *tree, RbKey_t key, void *prevDataOut);
+int 
+	utilRbTree_CheckAllData(struct UtilRbTree *tree, RbCheck_t how, RbKey_t than, check_func callback, void *checkArg);
+int 
+	utilRbTree_FindMinimum(const struct UtilRbTree *tree, RbKey_t *keyOut, void *dataBuff);
 int 
 	utilRbTree_AbortCheck(struct UtilRbTree *tree);
 const char *

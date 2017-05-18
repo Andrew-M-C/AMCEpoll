@@ -34,6 +34,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <string.h>
+#include <stdint.h>
 
 #define _RB_TREE_DEBUG_FLAG
 
@@ -79,10 +80,10 @@ typedef enum {
 struct RbTreeNode {
 	RbKey_t    key;
 	RbColor_t  color;
-	void      *obj;
 	struct RbTreeNode *parent;
 	struct RbTreeNode *left;
 	struct RbTreeNode *right;
+	uint8_t    data[0];
 };
 
 
@@ -142,14 +143,14 @@ static int _rb_err(int err)
 
 
 /* --------------------_rb_initialized----------------------- */
-static inline BOOL _rb_initialized(struct UtilRbTree *tree)
+static inline BOOL _rb_initialized(const struct UtilRbTree *tree)
 {
 	return _BITS_ALL_SET(tree->status, RbStatus_InitOK);
 }
 
 
 /* --------------------_rb_is_checking----------------------- */
-static inline BOOL _rb_is_checking(struct UtilRbTree *tree)
+static inline BOOL _rb_is_checking(const struct UtilRbTree *tree)
 {
 	return _BITS_ALL_SET(tree->status, RbStatus_IsChecking);
 }
@@ -223,26 +224,51 @@ static struct RbTreeNode *_node_search(const struct UtilRbTree *tree, RbKey_t ke
 
 
 /* --------------------_node_new----------------------- */
-static struct RbTreeNode *_node_new(RbKey_t key, struct RbTreeNode *parent, RbColor_t color, void *obj)
+static struct RbTreeNode *_node_new(struct UtilRbTree *tree, RbKey_t key, struct RbTreeNode *parent, RbColor_t color, void *data)
 {
-	struct RbTreeNode *ret = malloc(sizeof(*ret));
+	struct RbTreeNode *ret = malloc(sizeof(*ret) + tree->alloc_size);
 	if (ret) {
 		ret->key   = key;
 		ret->color = color;
-		ret->obj   = obj;
 		ret->parent= parent;
 		ret->left  = NULL;
 		ret->right = NULL;
+		memcpy(&(ret->data), data, tree->data_size);
 	}
 	return ret;
 }
 
 
-/* --------------------_node_new----------------------- */
-static void _node_free(struct RbTreeNode *node)
+/* --------------------_node_set_data----------------------- */
+static inline void _node_set_data(const struct UtilRbTree *tree, struct RbTreeNode *node, const void *data)
+{
+	memcpy(&(node->data), data, tree->data_size);
+}
+
+
+/* --------------------_node_get_data----------------------- */
+static inline void _node_get_data(const struct UtilRbTree *tree, const struct RbTreeNode *node, void *dataOut)
+{
+	memcpy(dataOut, &(node->data), tree->data_size);
+}
+
+
+/* --------------------_node_free----------------------- */
+static inline void _node_free(struct RbTreeNode *node)
 {
 	free(node);
 	return;
+}
+
+
+/* --------------------_node_clean_and_free_recursively----------------------- */
+static void _node_clean_and_free_recursively(struct RbTreeNode *node)
+{
+	if (node) {
+		_node_clean_and_free_recursively(node->left);
+		_node_clean_and_free_recursively(node->right);
+		_node_free(node);
+	}
 }
 
 
@@ -468,14 +494,14 @@ static void _rb_check_after_insert_by_rb_rule(struct UtilRbTree *tree, struct Rb
 
 
 /* --------------------_rb_insert_node----------------------- */
-static int _rb_insert_node(struct UtilRbTree *tree, RbKey_t key, void *obj)
+static int _rb_insert_node(struct UtilRbTree *tree, RbKey_t key, void *data)
 {
 	struct RbTreeNode*node = tree->nodes;
 	struct RbTreeNode *newNode = NULL;
 
 	if (NULL == node)	// root
 	{
-		newNode = _node_new(key, NULL, Color_Black, obj);
+		newNode = _node_new(tree, key, NULL, Color_Black, data);
 		if (NULL == newNode) {
 			return _rb_err(errno);
 		}
@@ -492,7 +518,7 @@ static int _rb_insert_node(struct UtilRbTree *tree, RbKey_t key, void *obj)
 		if (key < node->key)
 		{
 			if (NULL == node->left) {		/* found a slot */
-				newNode = _node_new(key, node, Color_Red, obj);
+				newNode = _node_new(tree, key, node, Color_Red, data);
 				if (NULL == newNode) {
 					return _rb_err(errno);
 				}
@@ -506,7 +532,7 @@ static int _rb_insert_node(struct UtilRbTree *tree, RbKey_t key, void *obj)
 		else if (key > node->key)
 		{
 			if (NULL == node->right) {		/* found a slot */
-				newNode = _node_new(key, node, Color_Red, obj);
+				newNode = _node_new(tree, key, node, Color_Red, data);
 				if (NULL == newNode) {
 					return _rb_err(errno);
 				}
@@ -519,12 +545,7 @@ static int _rb_insert_node(struct UtilRbTree *tree, RbKey_t key, void *obj)
 		}
 		else	/* conflict found */
 		{
-			if (obj == node->obj) {
-				return 0;
-			}
-			else {
-				return _rb_err(RB_ERR_INSERT_CONFLICT);
-			}
+			return _rb_err(RB_ERR_INSERT_CONFLICT);
 		}
 	}
 	while(NULL == newNode);
@@ -844,7 +865,7 @@ static inline void _check_invoke(struct UtilRbTree *tree, RbCheck_t how, RbKey_t
 	para.how  = how;
 	para.than = than;
 	para.key  = node->key;
-	para.object = node->obj;
+	para.data = &(node->data);
 
 	callback(&para, checkArg);
 }
@@ -1191,12 +1212,12 @@ static int _check_tree_children(struct UtilRbTree *tree, RbCheck_t how, RbKey_t 
 #if 1
 
 /* --------------------utilRbTree_New----------------------- */
-struct UtilRbTree *utilRbTree_New()
+struct UtilRbTree *utilRbTree_New(size_t dataSize)
 {
 	struct UtilRbTree *ret = malloc(sizeof(*ret));
 	if (ret) {
-		ret->status = 0;
-		utilRbTree_Init(ret);
+		memset(ret, 0, sizeof(*ret));
+		utilRbTree_Init(ret, dataSize);
 	}
 	return ret;
 }
@@ -1222,8 +1243,11 @@ int utilRbTree_Destory(struct UtilRbTree *tree)
 
 
 /* --------------------utilRbTree_Init----------------------- */
-int utilRbTree_Init(struct UtilRbTree *tree)
+int utilRbTree_Init(struct UtilRbTree *tree, size_t dataSize)
 {
+	size_t mod = 0;
+	const size_t base = sizeof(void *);
+
 	if (NULL == tree) {
 		return _rb_err(EINVAL);
 	}
@@ -1232,9 +1256,19 @@ int utilRbTree_Init(struct UtilRbTree *tree)
 		return _rb_err(RB_ERR_ALREADY_INIT);
 	}
 
+	if (0 == dataSize) {
+		return _rb_err(EINVAL);
+	}
+
+	mod = dataSize % base;
+
 	tree->status = RbStatus_InitOK;
 	tree->count  = 0;
+	tree->alloc_size = (0 == mod) ? dataSize : (dataSize + base - mod);
+	tree->data_size  = dataSize;
 	tree->nodes  = NULL;
+
+	_RB_DB("Request data size %d, actual malloc size %d", (int)(tree->data_size), (int)(tree->alloc_size));
 		
 	return 0;
 }
@@ -1243,101 +1277,135 @@ int utilRbTree_Init(struct UtilRbTree *tree)
 /* --------------------utilRbTree_Clean----------------------- */
 int utilRbTree_Clean(struct UtilRbTree *tree)
 {
-	// TODO:
-	return _rb_err(ENOSYS);
+	if (NULL == tree) {
+		return _rb_err(EINVAL);
+	}
+	if (_rb_is_checking(tree)) {
+		return _rb_err(RB_ERR_DURING_CHECK);
+	}
+
+	_node_clean_and_free_recursively(tree->nodes);
+	tree->nodes = NULL;
+	tree->alloc_size = 0;
+	tree->data_size  = 0;
+	tree->count = 0;
+	tree->status = 0;
+
+	return 0;
 }
 
 
-/* --------------------utilRbTree_SetObject----------------------- */
-int utilRbTree_SetObject(struct UtilRbTree *tree, void *obj, RbKey_t key, void **prevObjOut)
+/* --------------------utilRbTree_GetDataSize----------------------- */
+size_t utilRbTree_GetDataSize(const struct UtilRbTree *tree)
 {
-	void *prevObj = NULL;
-	int ret = 0;
-
 	if (NULL == tree) {
-		ret = _rb_err(EINVAL);
+		return 0;
 	}
 	else if (FALSE == _rb_initialized(tree)) {
-		ret = _rb_err(RB_ERR_NOT_INIT);
+		return 0;
+	}
+	else {
+		return tree->data_size;
+	}
+}
+
+
+/* --------------------utilRbTree_SetData----------------------- */
+int utilRbTree_SetData(struct UtilRbTree *tree, RbKey_t key, void *data, void *prevData)
+{
+	if (NULL == tree) {
+		return _rb_err(EINVAL);
+	}
+	else if (NULL == data) {
+		return _rb_err(EINVAL);
+	}
+	else if (FALSE == _rb_initialized(tree)) {
+		return _rb_err(RB_ERR_NOT_INIT);
 	}
 	else if (_rb_is_checking(tree)) {
-		ret = _rb_err(RB_ERR_DURING_CHECK);
+		return _rb_err(RB_ERR_DURING_CHECK);
 	}
 	else {
 		struct RbTreeNode *node = NULL;
 		node = _node_search(tree, key);
-		if (node) {
-			prevObj = node->obj;
-			node->obj = obj;
+		if (node)
+		{
+			if (prevData) {
+				_node_get_data(tree, node, prevData);
+			}
+			_node_set_data(tree, node, data);
+			return 0;
 		}
 		else {
-			ret = _rb_insert_node(tree, key, obj);
+			return _rb_insert_node(tree, key, data);
 		}
 	}
+}
 
-	if (prevObjOut) {
-		*prevObjOut = prevObj;
+
+/* --------------------utilRbTree_GetData----------------------- */
+int utilRbTree_GetData(const struct UtilRbTree *tree, RbKey_t key, void *dataBuff)
+{
+	int ret = 0;
+	struct RbTreeNode *node = NULL;
+
+	if (NULL == tree) {
+		return _rb_err(EINVAL);
 	}
+	else if (FALSE == _rb_initialized(tree)) {
+		return _rb_err(RB_ERR_NOT_INIT);
+	}
+	else {
+		/* legal */
+	}
+
+	node = _node_search(tree, key);
+	if (NULL == node) {
+		ret = _rb_err(RB_ERR_NO_FOUND);
+		if (dataBuff) {
+			memset(dataBuff, 0, tree->data_size);
+		}
+	}
+	else {
+		if (dataBuff) {
+			_node_get_data(tree, node, dataBuff);
+		}
+	}	
 	return ret;
 }
 
 
-/* --------------------utilRbTree_GetObject----------------------- */
-void *utilRbTree_GetObject(const struct UtilRbTree *tree, RbKey_t key)
+/* --------------------utilRbTree_DelData----------------------- */
+int utilRbTree_DelData(struct UtilRbTree *tree, RbKey_t key, void *prevDataOut)
 {
-	struct RbTreeNode *node = NULL;
-
 	if (NULL == tree) {
-		errno = EINVAL;
-		return NULL;
-	}
-
-	node = _node_search(tree, key);
-	if (node) {
-		return node->obj;
-	} else {
-		return NULL;
-	}
-}
-
-
-/* --------------------utilRbTree_DelObject----------------------- */
-int utilRbTree_DelObject(struct UtilRbTree *tree, RbKey_t key, void **prevObjOut)
-{
-	void *prevObj = NULL;
-	int ret = 0;
-
-	if (NULL == tree) {
-		ret = _rb_err(EINVAL);
+		return _rb_err(EINVAL);
 	}
 	else if (FALSE == _rb_initialized(tree)) {
-		ret = _rb_err(RB_ERR_NOT_INIT);
+		return _rb_err(RB_ERR_NOT_INIT);
 	}
 	else if (_rb_is_checking(tree)) {
-		ret = _rb_err(RB_ERR_DURING_CHECK);
+		return _rb_err(RB_ERR_DURING_CHECK);
 	}
 	else {
 		struct RbTreeNode *node = NULL;
 
 		node = _node_search(tree, key);
 		if (NULL == node) {
-			ret = _rb_err(RB_ERR_NO_FOUND);
+			return _rb_err(RB_ERR_NO_FOUND);
 		}
 		else {
-			prevObj = node->obj;
-			ret = _rb_delete_node(tree, node);
+			if (prevDataOut) {
+				_node_get_data(tree, node, prevDataOut);
+			}
+			return _rb_delete_node(tree, node);
 		}
 	}
-
-	if (prevObjOut) {
-		prevObjOut = prevObj;
-	}
-	return ret;
 }
 
 
-/* --------------------utilRbTree_CheckObjects----------------------- */
-int utilRbTree_CheckObjects(struct UtilRbTree *tree, RbCheck_t how, RbKey_t than, check_func callback, void *checkArg)
+/* --------------------utilRbTree_CheckAllData----------------------- */
+int utilRbTree_CheckAllData(struct UtilRbTree *tree, RbCheck_t how, RbKey_t than, check_func callback, void *checkArg)
 {
 	int ret = 0;
 
@@ -1363,6 +1431,31 @@ int utilRbTree_CheckObjects(struct UtilRbTree *tree, RbCheck_t how, RbKey_t than
 	_BITS_CLR(tree->status, RbStatus_IsChecking | RbStatus_AbortCheck);
 
 	return ret;
+}
+
+
+/* --------------------utilRbTree_FindMinimum----------------------- */
+int utilRbTree_FindMinimum(const struct UtilRbTree *tree, RbKey_t *keyOut, void *dataBuff)
+{
+	if (NULL == tree) {
+		return _rb_err(EINVAL);
+	}
+	else if (FALSE == _rb_initialized(tree)) {
+		return _rb_err(RB_ERR_NOT_INIT);
+	}
+	else if (0 == tree->count) {
+		return _rb_err(RB_ERR_NO_FOUND);
+	}
+	else {
+		struct RbTreeNode *node = _node_find_min_leaf(tree->nodes);
+		if (keyOut) {
+			*keyOut = node->key;
+		}
+		if (dataBuff) {
+			_node_get_data(tree, node, dataBuff);
+		}
+		return 0;
+	}
 }
 
 

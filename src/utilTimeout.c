@@ -2,13 +2,13 @@
 	Copyright (C) 2017 by Andrew Chang <laplacezhang@126.com>
 	Licensed under the LGPL v2.1, see the file COPYING in base directory.
 	
-	File name: 	utilTimeout.h
+	File name: 	utilTimeout.c
 	
 	Description: 	
-	    This file provides common timeout service for all types of events. 
+	    This file definds simple common function for AMCEpoll project.
 			
 	History:
-		2017-05-07: File created as "utilTimeout.h"
+		2017-05-18: File created as "utilTimeout.c"
 
 	------------------------------------------------------------------------
 
@@ -24,39 +24,25 @@
 		
 ********************************************************************************/
 
-#ifndef __UTIL_TIMEOUT_H__
-#define __UTIL_TIMEOUT_H__
+/********/
+#define __HEADERS
+#ifdef __HEADERS
 
-/* headers */
-#include "epCommon.h"
-#include "utilRbTree.h"
-#include <time.h>
+#include "utilTimeout.h"
+#include <errno.h>
 
-/* data definitions */
-/* all data structures should be used internally */
-struct UtilTimeoutChain {
-	// TODO:
-	
-};
+#endif
 
 
-/* public functions */
-int 
-	utilTimeout_Init(struct UtilTimeoutChain *chain);
-int 
-	utilTimeout_Clean(struct UtilTimeoutChain *chain);
-int 
-	utilTimeout_AddObject(struct UtilTimeoutChain *chain, void *obj, uint64_t usec);
-int 
-	utilTimeout_DelObject(struct UtilTimeoutChain *chain, void *obj);
-struct timespec  
-	utilTimeout_GetMinimumTimeout(struct UtilTimeoutChain *chain, void **objOut);
-void *
-	utilTimeout_DrainTimeoutObject(struct UtilTimeoutChain *chain);			/* should invoke until NULL returns */
-struct timespec  
-	utilTimeout_GetSysupTime(void);
+/********/
+#define __PUBLIC_FUNCTIONS
+#ifdef __PUBLIC_FUNCTIONS
+
+/* --------------------N/A----------------------- */
 
 
 #endif
+
+
 /* EOF */
 
