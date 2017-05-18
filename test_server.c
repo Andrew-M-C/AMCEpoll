@@ -360,7 +360,7 @@ static void _callback_accept(struct AMCEpollEvent *theEvent, int fd, events_t ev
 	struct AMCEpoll *base = (struct AMCEpoll *)arg;
 
 	if (events & EP_EVENT_FREE) {
-		_LOG("Close fd %d", fd);
+		_LOG("SRV free, close fd %d", fd);
 		close(fd);
 		fd = -1;
 	}

@@ -109,6 +109,8 @@ ssize_t
 	AMCFd_SendTo(int fd, const void *buff, size_t nbyte, int flags, const struct sockaddr *to, socklen_t tolen);
 ssize_t 
 	AMCFd_RecvFrom(int fd, void *buff, size_t nbyte, int flags, struct sockaddr *from, socklen_t *fromlen);
+int 
+	AMCFd_SockaddrToStr(const struct sockaddr *addr, char *buff, size_t buffSize);
 
 
 #endif

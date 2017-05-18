@@ -42,6 +42,10 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <signal.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #endif
 
@@ -590,6 +594,48 @@ ssize_t AMCFd_RecvFrom(int fd, void *rawBuf, size_t nbyte, int flags, struct soc
 	// end of "while (FALSE == isDone)"
 
 	return ret;
+}
+
+
+/* --------------------AMCFd_SockaddrToStr----------------------- */
+int AMCFd_SockaddrToStr(const struct sockaddr *addr, char *buff, size_t buffSize)
+{
+	if (addr && buff && buffSize)
+	{
+		int ret = 0;
+
+		switch (addr->sa_family)
+		{
+		case AF_UNIX:
+		//case AF_LOCAL:
+			{
+				const struct sockaddr_un *addrUn = (const struct sockaddr_un *)addr;
+				buff[buffSize - 1] = '\0';
+				strncpy(buff, addrUn->sun_path, buffSize - 1);
+			}
+			break;
+		case AF_INET:
+			{
+				const struct sockaddr_in *addrIn = (const struct sockaddr_in *)addr;
+				inet_ntop(AF_INET, &(addrIn->sin_addr), buff, (socklen_t)buffSize);
+			}
+			break;
+		case AF_INET6:
+			{
+				const struct sockaddr_in6 *addrIn6 = (const struct sockaddr_in6 *)addr;
+				inet_ntop(AF_INET6, &(addrIn6->sin6_addr), buff, (socklen_t)buffSize);
+			}
+			break;
+		default:
+			ERROR("Unsupported type: %d", (int)(addr->sa_family));
+			break;
+		}
+
+		return ret;
+	}
+	else {
+		RETURN_ERR(EINVAL);
+	}
 }
 
 

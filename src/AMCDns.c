@@ -42,7 +42,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-//#define _DNS_DEBUG_FLAG
+#define _DNS_DEBUG_FLAG
 
 #endif
 
@@ -393,22 +393,22 @@ static ssize_t _dns_resolve_RR(uint8_t *pDNS, uint8_t *pRR,
 
 		case DNS_RR_TYPE_AAAA:
 			inet_ntop(AF_INET6, pRR, name, DNS_DOMAIN_LEN_MAX);
-			_DNS_DB("%s - IPv6 %s", para, name);
+			//_DNS_DB("%s - IPv6 %s", para, name);
 			break;
 
 		case DNS_RR_TYPE_A:
 			sprintf(name, "%u.%u.%u.%u", (pRR + len)[0], (pRR + len)[1], (pRR + len)[2], (pRR + len)[3]);
-			_DNS_DB("%s - IPv4 %u.%u.%u.%u", para, (pRR + len)[0], (pRR + len)[1], (pRR + len)[2], (pRR + len)[3]);
+			//_DNS_DB("%s - IPv4 %u.%u.%u.%u", para, (pRR + len)[0], (pRR + len)[1], (pRR + len)[2], (pRR + len)[3]);
 			break;
 
 		case DNS_RR_TYPE_CNAME:
 			_dns_resolve_name(pDNS, pRR + len, name, TRUE);
-			_DNS_DB("%s - CNAME: %s", para, name);
+			//_DNS_DB("%s - CNAME: %s", para, name);
 			break;
 
 		case DNS_RR_TYPE_NS:
 			_dns_resolve_name(pDNS, pRR + len, name, TRUE);
-			_DNS_DB("%s - name server: %s", para, name);
+			//_DNS_DB("%s - name server: %s", para, name);
 			break;
 		}
 
@@ -655,7 +655,7 @@ static struct AMCDnsResult *_dns_resolve(uint8_t *pDNS, size_t len, BOOL detail)
 		do {
 			size_t thisLen = _dns_resolve_query(pDNS, data, name, NULL);
 
-			_DNS_DB("%s", name);
+			//_DNS_DB("%s", name);
 			data += thisLen;
 			len -= thisLen;
 			quesRRs--;
@@ -671,7 +671,7 @@ static struct AMCDnsResult *_dns_resolve(uint8_t *pDNS, size_t len, BOOL detail)
 
 		data += thisLen;
 		len -= thisLen;
-		_DNS_DB("Last: %s", last ? last->name : "NULL");
+		//_DNS_DB("Last: %s", last ? last->name : "NULL");
 	}
 
 	/* read auth RRs */
@@ -688,7 +688,7 @@ static struct AMCDnsResult *_dns_resolve(uint8_t *pDNS, size_t len, BOOL detail)
 
 		data += thisLen;
 		len -= thisLen;
-		_DNS_DB("Last: %s", last ? last->name : "NULL");
+		//_DNS_DB("Last: %s", last ? last->name : "NULL");
 	}
 
 	/* read additional RRs */
@@ -705,7 +705,7 @@ static struct AMCDnsResult *_dns_resolve(uint8_t *pDNS, size_t len, BOOL detail)
 
 		data += thisLen;
 		len -= thisLen;
-		_DNS_DB("Last: %s", last ? last->name : "NULL");
+		//_DNS_DB("Last: %s", last ? last->name : "NULL");
 	}
 
 	/* return */
@@ -1006,6 +1006,13 @@ static ssize_t _sock_recvfrom(int fd, void *rawBuf, size_t nbyte, int flags, str
 		}
 		else
 		{
+
+#ifdef _DNS_DEBUG_FLAG
+#include "AMCEpoll.h"
+			char addr[256] = "";
+			AMCFd_SockaddrToStr(from, addr, sizeof(addr));
+			_DNS_DB("Read from %s", addr);
+#endif
 			ret += callStat;
 
 			if (ret >= nbyte) {
