@@ -5,7 +5,7 @@
 	File name: 	utilTimeout.h
 	
 	Description: 	
-	    This file provides common timeout service for all types of events. 
+	    This file provides common timeout storage service for all types of events. 
 			
 	History:
 		2017-05-07: File created as "utilTimeout.h"
@@ -31,12 +31,15 @@
 #include "epCommon.h"
 #include "utilRbTree.h"
 #include <time.h>
+#include <stdlib.h>
+
 
 /* data definitions */
-/* all data structures should be used internally */
+/* all data structures should be used INTERNALLY */
 struct UtilTimeoutChain {
-	// TODO:
-	
+	BOOL               init_OK;
+	struct UtilRbTree  time_obj_chain;		/* key: time --->   value: object list */
+	struct UtilRbTree  obj_time_chain;		/* key: object ---> value: time */
 };
 
 
@@ -46,13 +49,11 @@ int
 int 
 	utilTimeout_Clean(struct UtilTimeoutChain *chain);
 int 
-	utilTimeout_AddObject(struct UtilTimeoutChain *chain, void *obj, uint64_t usec);
+	utilTimeout_SetObject(struct UtilTimeoutChain *chain, void *object, struct timespec inTime);
 int 
-	utilTimeout_DelObject(struct UtilTimeoutChain *chain, void *obj);
-struct timespec  
-	utilTimeout_GetMinimumTimeout(struct UtilTimeoutChain *chain, void **objOut);
-void *
-	utilTimeout_DrainTimeoutObject(struct UtilTimeoutChain *chain);			/* should invoke until NULL returns */
+	utilTimeout_DelObject(struct UtilTimeoutChain *chain, void *object);
+int 
+	utilTimeout_GetSmallestTime(struct UtilTimeoutChain *chain, struct timespec *timeOut, void **objOut);
 struct timespec  
 	utilTimeout_GetSysupTime(void);
 
