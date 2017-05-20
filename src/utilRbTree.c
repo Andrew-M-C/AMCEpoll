@@ -47,7 +47,7 @@
 #if 1
 
 #ifdef _RB_TREE_DEBUG_FLAG
-#define _RB_DB(fmt, args...)		printf("[DNS - %04d] "fmt"\n", (int)__LINE__, ##args)
+#define _RB_DB(fmt, args...)		printf("[RBT - %04d] "fmt"\n", (int)__LINE__, ##args)
 #define _RB_MARK()					_RB_DB("--- MARK ---");
 #else
 #define _RB_DB(fmt, args...)
@@ -434,16 +434,16 @@ static void _rb_check_after_insert_by_rb_rule(struct UtilRbTree *tree, struct Rb
 
 	if (_node_is_root(node))							// root node. This is impossible because it is done previously
 	{
-		_RB_DB("MARK (%llu) case 1", node->key);
+		_RB_DB("MARK (%lld) case 1", (long long)(node->key));
 		_SET_BLACK(node);
 	}
 	else if (_node_is_black(node->parent))			// parent black. Nothing additional needed
 	{
-		_RB_DB("MARK (%llu) case 2", node->key);
+		_RB_DB("MARK (%lld) case 2", (long long)(node->key));
 	}
 	else if (uncleNode && _node_is_red(uncleNode))	// parent and uncle node are both red
 	{
-		_RB_DB("MARK (%llu) case 3, uncle: %llu, parent: %llu", node->key, uncleNode->key, node->parent->key);
+		_RB_DB("MARK (%lld) case 3, uncle: %lld, parent: %lld", (long long)(node->key), (long long)(uncleNode->key), (long long)(node->parent->key));
 		_SET_BLACK(node->parent);
 		_SET_BLACK(uncleNode);
 		_SET_RED(node->parent->parent);
@@ -455,7 +455,7 @@ static void _rb_check_after_insert_by_rb_rule(struct UtilRbTree *tree, struct Rb
 		if ((node == node->parent->right) &&
 			(node->parent == node->parent->parent->left))	// node is its parent's left child, AND parent is grandparent's right child. left-rotation needed.
 		{
-			_RB_DB("MARK (%llu) case 4", node->key);
+			_RB_DB("MARK (%lld) case 4", (long long)(node->key));
 			_rb_rotate_left(tree, node->parent);
 			node = node->left;
 			//_rb_dump_node(array->children, 0);
@@ -463,7 +463,7 @@ static void _rb_check_after_insert_by_rb_rule(struct UtilRbTree *tree, struct Rb
 		else if ((node == node->parent->left) &&
 				(node->parent == node->parent->parent->right))
 		{
-			_RB_DB("MARK (%llu) case 4", node->key);
+			_RB_DB("MARK (%lld) case 4", (long long)(node->key));
 			_rb_rotate_right(tree, node->parent);
 			node = node->right;
 			//_rb_dump_node(array->children, 0);
@@ -478,12 +478,12 @@ static void _rb_check_after_insert_by_rb_rule(struct UtilRbTree *tree, struct Rb
 		if ((node == node->parent->left) &&
 			(node->parent == node->parent->parent->left))
 		{
-			_RB_DB("MARK (%llu) case 5", node->key);
+			_RB_DB("MARK (%lld) case 5", (long long)(node->key));
 			_rb_rotate_right(tree, node->parent->parent);
 		}
 		else
 		{
-			_RB_DB("MARK (%llu) case 5", node->key);
+			_RB_DB("MARK (%lld) case 5", (long long)(node->key));
 			_rb_rotate_left(tree, node->parent->parent);
 			//_RB_DB("MARK test:");
 			//_rb_dump_node(array->children, 0);
@@ -777,7 +777,7 @@ static int _rb_delete_node(struct UtilRbTree *tree, struct RbTreeNode *node)
 
 	if (FALSE == nodeHasChild)
 	{
-		_RB_DB("DEL: node %llu is leaf", node->key);
+		_RB_DB("DEL: node %lld is leaf", (long long)(node->key));
 		if (_node_is_root(node))
 		{
 			tree->nodes = NULL;
@@ -788,11 +788,11 @@ static int _rb_delete_node(struct UtilRbTree *tree, struct RbTreeNode *node)
 		else
 		{
 			if (node == node->parent->left) {
-				_RB_DB("DEL left of %llu (%llu)", node->parent->key, node->key);
+				_RB_DB("DEL left of %lld (%lld)", (long long)node->parent->key, (long long)node->key);
 				node->parent->left = NULL;
 			}
 			else {
-				_RB_DB("DEL left of %llu (%llu)", node->parent->key, node->key);
+				_RB_DB("DEL left of %lld (%lld)", (long long)node->parent->key, (long long)node->key);
 				node->parent->right = NULL;
 			}
 
@@ -806,7 +806,7 @@ static int _rb_delete_node(struct UtilRbTree *tree, struct RbTreeNode *node)
 	{
 		struct RbTreeNode tmpNode;
 		struct RbTreeNode *smallestRightChild = _node_find_min_leaf(node->right);
-		_RB_DB("DEL: node %llu has 2 children, replace with %llu", node->key, smallestRightChild->key);
+		_RB_DB("DEL: node %lld has 2 children, replace with %lld", (long long)node->key, (long long)smallestRightChild->key);
 
 		/* replace with smallest node */
 		tmpNode.key = node->key;
@@ -822,7 +822,7 @@ static int _rb_delete_node(struct UtilRbTree *tree, struct RbTreeNode *node)
 
 		if (_node_is_red(node))		// if node is red, both parent and child nodes are black. We could simply replace it with its child
 		{
-			_RB_DB("DEL: node %llu red", node->key);
+			_RB_DB("DEL: node %lld red", (long long)node->key);
 			_rb_delete_node_and_reconnect_with(tree, node, child);
 			_node_free(node);
 			node = NULL;
@@ -830,7 +830,7 @@ static int _rb_delete_node(struct UtilRbTree *tree, struct RbTreeNode *node)
 		}
 		else if (_node_is_red(child))		// if node is black but its child is red. we could repace it with its child and refill the child as black
 		{
-			_RB_DB("DEL: node %llu black but child red", node->key);
+			_RB_DB("DEL: node %lld black but child red", (long long)node->key);
 			_rb_delete_node_and_reconnect_with(tree, node, child);
 			_SET_BLACK(child);
 			_node_free(node);
