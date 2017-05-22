@@ -119,6 +119,44 @@ int epEventIntnl_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *eve
 }
 
 
+/* --------------------epEventIntnl_AttachToTimeoutChain----------------------- */
+int epEventIntnl_AttachToTimeoutChain(struct AMCEpoll *base, struct AMCEpollEvent *event)
+{
+	if (NULL == base) {
+		return ep_err(EINVAL);
+	}
+	else if (NULL == event) {
+		return ep_err(EINVAL);
+	}
+	else if ((event->timeout <= 0) || 
+			(FALSE == BITS_ANY_SET(event->events, EP_EVENT_TIMEOUT)))
+	{
+		utilTimeout_DelObject(&(base->all_timeouts), event);
+		return ep_err(0);
+	}
+	else {
+		struct timespec timeout = utilTimeout_TimespecFromMilisecs(event->timeout);
+		return utilTimeout_SetObject(&(base->all_timeouts), event, timeout);
+	}
+}
+
+
+/* --------------------epEventIntnl_DetachFromTimeoutChain----------------------- */
+int epEventIntnl_DetachFromTimeoutChain(struct AMCEpoll *base, struct AMCEpollEvent *event)
+{
+	if (NULL == base) {
+		return ep_err(EINVAL);
+	}
+	else if (NULL == event) {
+		return ep_err(EINVAL);
+	}
+	else {
+		utilTimeout_DelObject(&(base->all_timeouts), event);
+		return ep_err(0);
+	}
+}
+
+
 /* --------------------epEventIntnl_InvokeUserCallback----------------------- */
 int epEventIntnl_InvokeUserCallback(struct AMCEpollEvent *event, int handler, events_t what)
 {
@@ -282,9 +320,18 @@ int epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, i
 		return ep_err(EINVAL);
 	} else if ('\0' == event->invoke_func) {
 		return ep_err(EBADF);
-	} else {
+	}
+	else {
+		
 		return (event->invoke_func)(base, event, epollEvents);
 	}
+}
+
+
+/* --------------------epEvent_GetEvent----------------------- */
+struct AMCEpollEvent *epEvent_GetEvent(struct AMCEpoll *base, const char *key)
+{
+	return epEventIntnl_GetEvent(base, key);
 }
 
 

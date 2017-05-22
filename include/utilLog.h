@@ -52,6 +52,8 @@ enum {
 #define ALERT(fmt, args...)		utilLog(LOG_LV_ALERT, __FILE__" %d: "fmt, __LINE__, ##args)
 #define EMERG(fmt, args...)		utilLog(LOG_LV_EMERG, __FILE__" %d: "fmt, __LINE__, ##args)
 
+#define MARK()			DEBUG("<<< MARK >>>")
+
 /********/
 /* functions */
 void 

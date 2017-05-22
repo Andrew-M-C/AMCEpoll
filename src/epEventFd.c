@@ -197,23 +197,32 @@ static void _snprintf_fd_key(struct AMCEpollEvent *event, char *str, size_t buff
 static int _add_fd_event(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
 	int callStat = 0;
-	DEBUG("Add new event: %s - %p", event->key, event);
+	DEBUG("Add new event: %s - %p, timeout %ld", event->key, event, event->timeout);
 
 	callStat = epEventIntnl_AttachToBase(base, event);
 	if (callStat < 0) {
 		int err = errno;
 		ERROR("Failed to add new event: %s", strerror(err));
-		_RETURN_ERR(err);
+		callStat = err;
+		goto RETURN;
 	}
 
 	callStat = _epoll_add(base, event);
+	if (callStat < 0) {
+		goto RETURN;
+	}
+
+	callStat = epEventIntnl_AttachToTimeoutChain(base, event);
+
+RETURN:
 	if (0 == callStat) {
-		return 0;
+		return ep_err(0);
 	}
 	else {
 		int err = errno;
 		epEventIntnl_DetachFromBase(base, event);
-		_RETURN_ERR(err);
+		epEventIntnl_DetachFromTimeoutChain(base, event);
+		return ep_err(err);
 	}
 }
 
@@ -221,6 +230,7 @@ static int _add_fd_event(struct AMCEpoll *base, struct AMCEpollEvent *event)
 /* --------------------_mod_fd_event----------------------- */
 static int _mod_fd_event(struct AMCEpoll *base, struct AMCEpollEvent *event)
 {
+	epEventIntnl_AttachToTimeoutChain(base, event);
 	return _epoll_mod(base, event);
 }
 
@@ -267,6 +277,8 @@ struct AMCEpollEvent *epEventFd_Create(int fd, events_t events, long timeout, ev
 	newEvent->callback = callback;
 	newEvent->user_data = userData;
 	newEvent->epoll_events = _epoll_code_from_amc_code(events);
+	newEvent->timeout = timeout;
+	newEvent->timeout_added = FALSE;
 	newEvent->events = events;
 	newEvent->free_func = epEventFd_Destroy;
 	newEvent->genkey_func = epEventFd_GenKey;

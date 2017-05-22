@@ -28,11 +28,20 @@
 #define __UTIL_TIMEOUT_H__
 
 /* headers */
-#include "epCommon.h"
 #include "utilRbTree.h"
 #include <time.h>
 #include <stdlib.h>
 
+/* ahead declarations */
+struct AMCEpollEvent;
+
+#ifndef BOOL
+#ifndef _DO_NOT_DEFINE_BOOL
+#define BOOL	int
+#define FALSE	0
+#define TRUE	(!(FALSE))
+#endif
+#endif
 
 /* data definitions */
 /* all data structures should be used INTERNALLY */
@@ -49,13 +58,17 @@ int
 int 
 	utilTimeout_Clean(struct UtilTimeoutChain *chain);
 int 
-	utilTimeout_SetObject(struct UtilTimeoutChain *chain, void *object, struct timespec inTime);
+	utilTimeout_SetObject(struct UtilTimeoutChain *chain, struct AMCEpollEvent *event, struct timespec inTime);
 int 
-	utilTimeout_DelObject(struct UtilTimeoutChain *chain, void *object);
+	utilTimeout_DelObject(struct UtilTimeoutChain *chain, struct AMCEpollEvent *event);
 int 
-	utilTimeout_GetSmallestTime(struct UtilTimeoutChain *chain, struct timespec *timeOut, void **objOut);
+	utilTimeout_GetSmallestTime(struct UtilTimeoutChain *chain, struct timespec *timeOut, struct AMCEpollEvent **eventOut);
 struct timespec  
 	utilTimeout_GetSysupTime(void);
+struct timespec 
+	utilTimeout_TimespecFromMilisecs(long milisecs);
+signed long 
+	utilTimeout_MinimumSleepMilisecs(struct UtilTimeoutChain *chain);
 void 
 	utilTimeout_Debug(void);
 

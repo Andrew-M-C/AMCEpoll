@@ -43,6 +43,10 @@ int
 int 
 	epEventIntnl_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
+	epEventIntnl_AttachToTimeoutChain(struct AMCEpoll *base, struct AMCEpollEvent *event);
+int 
+	epEventIntnl_DetachFromTimeoutChain(struct AMCEpoll *base, struct AMCEpollEvent *event);
+int 
 	epEventIntnl_InvokeUserCallback(struct AMCEpollEvent *event, int handler, events_t what);
 int 
 	epEventIntnl_InvokeUserFreeCallback(struct AMCEpollEvent *event, int handler);
@@ -65,8 +69,8 @@ int
 	epEvent_DelFromBaseAndFree(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
 	epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvents);
-//struct AMCEpollEvent *epEvent_GetEvent(struct AMCEpoll *base, const char *key);
-#define epEvent_GetEvent(base, key)		epEventIntnl_GetEvent((base), (key))
+struct AMCEpollEvent *
+	epEvent_GetEvent(struct AMCEpoll *base, const char *key);
 
 #endif
 /* EOF */

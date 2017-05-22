@@ -645,7 +645,7 @@ static int _create_local_server(struct AMCEpoll *base)
 
 	acceptEvent = AMCEpoll_NewEvent(fd, 
 					EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_EVENT_TIMEOUT, 
-					0, _callback_accept, base);
+					2000, _callback_accept, base);
 	if (NULL == acceptEvent) {
 		_LOG("Failed to create event: %s", strerror(errno));
 		goto ERROR;
@@ -655,6 +655,9 @@ static int _create_local_server(struct AMCEpoll *base)
 	if (callStat < 0) {
 		_LOG("Failed to add event: %s", strerror(errno));
 		goto ERROR;
+	}
+	else {
+		_LOG("Accept event added");
 	}
 
 	return 0;
@@ -702,7 +705,7 @@ int main(int argc, char* argv[])
 		goto END;
 	}
 
-	callStat = _create_dns_handler(base);
+//	callStat = _create_dns_handler(base);
 	if (callStat < 0) {
 		goto END;
 	}

@@ -32,6 +32,7 @@
 #include "utilLog.h"
 #include "AMCEpoll.h"
 #include "cAssocArray.h"
+#include "utilTimeout.h"
 
 #include <sys/epoll.h>
 #include <errno.h>
@@ -95,6 +96,7 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 	int nTotal = 0;
 	int nIndex = 0;
 	int errCpy = 0;
+	long waitMilisec = 0;
 	BOOL shouldExit = FALSE;
 
 	base->base_status = 0;
@@ -102,7 +104,16 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 
 	/* This is actually a thread-like process */
 	do {
-		nTotal = epoll_wait(evFd, evBuff, evSize, 1000);		// TODO: implement timeout
+		waitMilisec = utilTimeout_MinimumSleepMilisecs(&(base->all_timeouts));
+		if (waitMilisec < 0) {
+			DEBUG("No timeout events");
+			waitMilisec = 1000;
+		}
+		else {
+			DEBUG("Next timeout event in %ld sec(s)", waitMilisec);
+		}
+		
+		nTotal = epoll_wait(evFd, evBuff, evSize, waitMilisec);		// TODO: implement timeout
 		errCpy = errno;
 		if (nTotal < 0) {
 			if (EINTR == errCpy) {
@@ -127,8 +138,15 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 				epollWhat = evBuff[nIndex].events;
 				amcEvent = (struct AMCEpollEvent *)(evBuff[nIndex].data.ptr);
 
-				if (amcEvent) {
+				if (amcEvent)
+				{
+					amcEvent->timeout_added = FALSE;
 					epEvent_InvokeCallback(base, amcEvent, epollWhat);
+					if ((FALSE == amcEvent->timeout_added) &&
+						(BITS_ANY_SET(amcEvent->events, EP_MODE_PERSIST | EP_EVENT_TIMEOUT)))
+					{
+						epEventIntnl_AttachToTimeoutChain(base, amcEvent);
+					}
 
 					if (FALSE == BITS_ANY_SET(amcEvent->events, EP_MODE_PERSIST)) {
 						epEvent_DelFromBase(base, amcEvent);
@@ -204,6 +222,14 @@ struct AMCEpoll *AMCEpoll_New(size_t buffSize)
 			}
 		}
 
+		/* timeout chain */
+		if (isOK) {
+			int callStat = utilTimeout_Init(&(ret->all_timeouts));
+			if (callStat < 0) {
+				isOK = FALSE;
+			}
+		}
+
 		/* return */
 		if (FALSE == isOK) {
 			if (ret) {
@@ -255,6 +281,8 @@ int AMCEpoll_Free(struct AMCEpoll *base)
 
 			cAssocArray_Delete(base->all_events, TRUE);
 			base->all_events = NULL;
+
+			utilTimeout_Clean(&(base->all_timeouts));
 
 			if (allKeys) {
 				cArrayKeys_Free(allKeys);

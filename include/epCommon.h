@@ -36,6 +36,8 @@
 
 #include "cAssocArray.h"
 #include "AMCEpoll.h"
+#include "utilTimeout.h"
+
 
 /* constants */
 #define EVENT_KEY_LEN_MAX	(32)
@@ -58,6 +60,8 @@ struct AMCEpollEvent {
 	char           key[EVENT_KEY_LEN_MAX];
 	uint8_t        inter_data[INTERNAL_DATA_LEN];		/* internal data, reserved for different types of events */
 	int            epoll_events;
+	long           timeout;
+	BOOL           timeout_added;
 	events_t       events;
 	free_func      free_func;
 	genkey_func    genkey_func;
@@ -71,6 +75,7 @@ struct AMCEpoll {
 	int             epoll_fd;
 	uint32_t        base_status;
 	cAssocArray    *all_events;
+	struct UtilTimeoutChain     all_timeouts;
 	size_t          epoll_buff_size;
 	epoll_event_st  epoll_buff[0];
 };

@@ -31,6 +31,7 @@
 #include "utilTimeout.h"
 #include "epCommon.h"
 #include "utilLog.h"
+
 #include <errno.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -128,7 +129,7 @@ static int _add_new_object(struct UtilTimeoutChain *chain, void *obj, struct tim
 	struct TimeItem timeValue;
 
 	callStat = utilRbTree_GetData(&(chain->time_obj_chain), timeKey, &objValue);
-	if (RB_ERR_NO_FOUND == callStat)
+	if (-RB_ERR_NO_FOUND == callStat)
 	{
 		/* no data exists at this time, just add it */
 		DEBUG("Add new time %04%ld.%09%ld", (long)(time->tv_sec), (long)(time->tv_nsec));
@@ -193,9 +194,11 @@ static int _set_object(struct UtilTimeoutChain *chain, void *obj, struct timespe
 	RbKey_t timeKey = _rbkey_from_timespec(time);
 	RbKey_t objKey  = _rbKey_from_objptr(obj);
 
+	_TM_DB("Add timeKey %llx, objKey %llx", (long long)timeKey, (long long)objKey);
+
 	callStat = utilRbTree_GetData(&(chain->obj_time_chain), objKey, &timeValue);
 	/* add new object */
-	if (RB_ERR_NO_FOUND == callStat) {
+	if (-RB_ERR_NO_FOUND == callStat) {
 		return _add_new_object(chain, obj, time);
 	}
 
@@ -262,14 +265,14 @@ static int _del_object(struct UtilTimeoutChain *chain, void *obj)
 	struct ObjItem objValue;
 
 	callStat = utilRbTree_DelData(&(chain->obj_time_chain), objKey, &timeValue);
-	if (RB_ERR_NO_FOUND == callStat) {
+	if (-RB_ERR_NO_FOUND == callStat) {
 		WARN("Failed to locat timeout object %p", obj);
 		return ep_err(ENOENT);
 	}
 
 	timeKey = timeValue.time;
 	callStat = utilRbTree_GetData(&(chain->time_obj_chain), timeKey, &objValue);
-	if (RB_ERR_NO_FOUND == callStat) {
+	if (-RB_ERR_NO_FOUND == callStat) {
 		WARN("Failed to locat timeout object %p in obj chain", obj);
 		return ep_err(ENOENT);
 	}
@@ -312,7 +315,6 @@ static int _del_object(struct UtilTimeoutChain *chain, void *obj)
 		return ep_err(0);
 	}
 
-
 	return -1;
 }
 
@@ -321,10 +323,51 @@ static int _del_object(struct UtilTimeoutChain *chain, void *obj)
 
 
 /********/
-#define __RB_TREE_CALLBACKS
+#define __GENERAL_INTERNAL_FUNCTIONS
 #if 1
 
+/* --------------------_timespec_sub----------------------- */
+static void _timespec_sub(struct timespec *result, struct timespec *a, struct timespec *b)
+{
+	struct timespec resCopy = {0};
+	if (a->tv_nsec < b->tv_nsec) {
+		resCopy.tv_nsec = a->tv_nsec + 1000000000 - b->tv_nsec;
+		resCopy.tv_sec = a->tv_sec - 1 - b->tv_sec;
+	}
+	else {
+		resCopy.tv_nsec = a->tv_nsec + 1000000000 - b->tv_nsec;
+		resCopy.tv_sec = a->tv_sec - 1 - b->tv_sec;
+	}
+	result->tv_sec  = resCopy.tv_sec;
+	result->tv_nsec = resCopy.tv_nsec;
+	return;
+}
 
+
+/* --------------------_timespec_from_milisecs----------------------- */
+static struct timespec _timespec_from_milisecs(long milisecs)
+{
+	struct timespec ret = {0, 0};
+	if (milisecs <= 0) {
+		return ret;
+	}
+	else {
+		time_t sec = milisecs / 1000;
+		long nsec = (milisecs - (sec * 1000)) * 1000000;
+
+		ret.tv_sec  = sec;
+		ret.tv_nsec = nsec;
+
+		return ret;
+	}
+}
+
+
+/* --------------------_milisecs_from_timespec----------------------- */
+static long _milisecs_from_timespec(struct timespec *spec)
+{
+	return (spec->tv_sec * 1000) + (spec->tv_nsec / 1000000);
+}
 
 
 #endif
@@ -391,7 +434,7 @@ int utilTimeout_Clean(struct UtilTimeoutChain *chain)
 
 
 /* --------------------utilTimeout_SetObject----------------------- */
-int utilTimeout_SetObject(struct UtilTimeoutChain *chain, void *object, struct timespec inTime)
+int utilTimeout_SetObject(struct UtilTimeoutChain *chain, struct AMCEpollEvent *event, struct timespec inTime)
 {
 	if (NULL == chain) {
 		return ep_err(EINVAL);
@@ -403,36 +446,52 @@ int utilTimeout_SetObject(struct UtilTimeoutChain *chain, void *object, struct t
 		RbKey_t timeKey = _rbkey_from_timespec(&inTime);
 
 		if (0 == timeKey) {
-			return utilTimeout_DelObject(chain, object);
+			return utilTimeout_DelObject(chain, event);
 		}
 		else {
-			DEBUG("Add timeout item: %04ld.%09ld --> %p", (long)(inTime.tv_sec), (long)(inTime.tv_nsec), object);
-			return _set_object(chain, object, &inTime);
+			int callStat = 0;
+			struct timespec target = utilTimeout_GetSysupTime();
+			uint64_t nsec = inTime.tv_nsec + target.tv_nsec;
+			if (nsec >= 1000000000) {
+				target.tv_sec += inTime.tv_sec + 1;
+				target.tv_nsec = (long)(nsec - 1000000000);
+			}
+			else {
+				target.tv_sec += inTime.tv_sec;
+				target.tv_nsec = (long)(nsec);
+			}
+			
+			DEBUG("Add timeout item: %04ld.%09ld --> %p", (long)(target.tv_sec), (long)(target.tv_nsec), event);
+			callStat = _set_object(chain, event, &target);
+			if (0 == callStat) {
+				event->timeout_added = TRUE;
+			}
+			return callStat;
 		}
 	}
 }
 
 
 /* --------------------utilTimeout_DelObject----------------------- */
-int utilTimeout_DelObject(struct UtilTimeoutChain *chain, void *object)
+int utilTimeout_DelObject(struct UtilTimeoutChain *chain, struct AMCEpollEvent *event)
 {
 	if (NULL == chain) {
 		return ep_err(EINVAL);
 	}
-	if (NULL == object) {
+	if (NULL == event) {
 		return ep_err(EINVAL);
 	}
 	if (FALSE == chain->init_OK) {
 		return ep_err(ENOENT);
 	}
 	else {
-		return _del_object(chain, object);
+		return _del_object(chain, event);
 	}
 }
 
 
 /* --------------------utilTimeout_GetSmallestTime----------------------- */
-int utilTimeout_GetSmallestTime(struct UtilTimeoutChain *chain, struct timespec *timeOut, void **objOut)
+int utilTimeout_GetSmallestTime(struct UtilTimeoutChain *chain, struct timespec *timeOut, struct AMCEpollEvent **eventOut)
 {
 	if (NULL == chain) {
 		return ep_err(EINVAL);
@@ -457,14 +516,63 @@ int utilTimeout_GetSmallestTime(struct UtilTimeoutChain *chain, struct timespec 
 			timeOut->tv_sec  = time.tv_sec;
 			timeOut->tv_nsec = time.tv_nsec;
 		}
-		if (objOut) {
-			*objOut = objValue.obj;
+		if (eventOut) {
+			*eventOut = (struct AMCEpollEvent *)(objValue.obj);
 		}
 
 		return ep_err(0);
 	}
 }
 
+
+/* --------------------utilTimeout_GetSysupTime----------------------- */
+struct timespec utilTimeout_GetSysupTime()
+{
+	struct timespec currtime;
+	clock_gettime(CLOCK_MONOTONIC, &currtime);
+	return currtime;
+}
+
+
+/* --------------------utilTimeout_TimespecFromMilisecs----------------------- */
+struct timespec utilTimeout_TimespecFromMilisecs(long milisecs)
+{
+	return _timespec_from_milisecs(milisecs);
+}
+
+
+/* --------------------utilTimeout_TimespecFromMilisecs----------------------- */
+signed long utilTimeout_MinimumSleepMilisecs(struct UtilTimeoutChain *chain)
+{
+	int callStat = 0;
+	struct AMCEpollEvent *event = NULL;
+	struct timespec nextTime = {0};
+
+	if (NULL == chain) {
+		return ep_err(EINVAL);
+	}
+
+	callStat = utilTimeout_GetSmallestTime(chain, &nextTime, &event);
+	if (0 == callStat) {
+		struct timespec diffTime = {0};
+		struct timespec currTime = utilTimeout_GetSysupTime();
+
+		_timespec_sub(&diffTime, &nextTime, &currTime);
+
+		if ((diffTime.tv_sec >= 0)
+			&& (diffTime.tv_nsec >= 0))
+		{
+			return _milisecs_from_timespec(&diffTime);
+		}
+		else {
+			return 0;
+		}
+	}
+	else {
+		/* no timeout exists */
+		return -1;
+	}
+}
 
 #endif
 

@@ -531,6 +531,7 @@ struct AMCEpollEvent *epEventSignal_Create(int sig, events_t events, long timeou
 	newEvent->callback = callback;
 	newEvent->user_data = userData;
 	newEvent->epoll_events = _signal_epoll_code_from_amc_code(events);
+	newEvent->timeout = timeout;
 	newEvent->events = events;
 	newEvent->free_func = epEventSignal_Destroy;
 	newEvent->genkey_func = epEventSignal_GenKey;
