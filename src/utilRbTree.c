@@ -107,6 +107,7 @@ static void _rb_check_delete_node_case_3(struct UtilRbTree *tree, struct RbTreeN
 static void _rb_check_delete_node_case_4(struct UtilRbTree *tree, struct RbTreeNode *node);
 static void _rb_check_delete_node_case_5(struct UtilRbTree *tree, struct RbTreeNode *node);
 static void _rb_check_delete_node_case_6(struct UtilRbTree *tree, struct RbTreeNode *node);
+static inline BOOL _node_is_red(const struct RbTreeNode *node);
 
 
 #endif
@@ -153,6 +154,123 @@ static inline BOOL _rb_initialized(const struct UtilRbTree *tree)
 static inline BOOL _rb_is_checking(const struct UtilRbTree *tree)
 {
 	return _BITS_ALL_SET(tree->status, RbStatus_IsChecking);
+}
+
+
+/* --------------------_rb_dump_indents----------------------- */
+static size_t _rb_dump_indents(int fd, size_t indent)
+{
+	size_t tmp, ret;
+	for (tmp = 0, ret = 0; tmp < indent; tmp ++, ret ++)
+	{
+		if (write(fd, "\t", 1) < 0) {
+			return ret;
+		}
+	}
+	return ret;
+}
+
+
+/* --------------------_rb_dump_node_content----------------------- */
+static inline uint8_t __char_from_hex(uint8_t hex)
+{
+	hex = hex & 0x0F;
+	if (hex >= 0x0A) {
+		return (hex - 0x0A) + 'A';
+	}
+	else {
+		return hex + '0';
+	}
+}
+static size_t _rb_dump_node_content(const struct RbTreeNode *node, size_t dataLen, int fd)
+{
+	size_t ret = 0;
+	size_t tmp = 0;
+	char buff[2];
+	uint8_t byte;
+	const uint8_t *data = (const uint8_t *)(node->data);
+
+	for (tmp = 0; tmp < dataLen; tmp ++, ret += 2)
+	{
+		byte = data[tmp];
+		buff[0] = __char_from_hex((byte & 0xF0) >> 4);
+		buff[1] = __char_from_hex((byte & 0x0F) >> 0);
+		if (write(fd, buff, 2) < 0) {
+			break;
+		}
+	}
+
+	tmp = write(fd, "\n", 1);
+	if (tmp > 0) {
+		ret += 1;
+	}
+	return ret;
+}
+
+
+/* --------------------_rb_dump----------------------- */
+static size_t _rb_dump(const struct UtilRbTree *tree, const struct RbTreeNode *node, int fd, size_t indent)
+{
+	char buff[256];
+	size_t len = 0;
+	size_t ret = 0;
+
+	/* self */
+	len = snprintf(buff, sizeof(buff), "<%s> <0x%08lx> ", _node_is_red(node) ? "Red" : "Blk", (long)node->key);
+	len = write(fd, buff, len);
+	if (len > 0) {
+		ret += len;
+	}
+	len += _rb_dump_node_content(node, tree->data_size, fd);
+
+	if ((NULL == node->left) && (NULL == node->right)) {
+		return ret;
+	}
+
+	/* right */
+	if (NULL == node->right)
+	{
+		ret += _rb_dump_indents(fd, indent + 1);
+		len = snprintf(buff, sizeof(buff), "Right: <...>\n");
+		len = write(fd, buff, len);
+		if (len > 0) {
+			ret += len;
+		}
+	}
+	else
+	{
+		ret += _rb_dump_indents(fd, indent + 1);
+		len = snprintf(buff, sizeof(buff), "Right: ");
+		len = write(fd, buff, len);
+		if (len > 0) {
+			ret += len;
+		}
+		ret += _rb_dump(tree, node->right,  fd, indent + 1);
+	}
+
+	/* left */
+	if (NULL == node->left)
+	{
+		ret += _rb_dump_indents(fd, indent + 1);
+		len = snprintf(buff, sizeof(buff), "Left:  <...>\n");
+		len = write(fd, buff, len);
+		if (len > 0) {
+			ret += len;
+		}
+	}
+	else
+	{
+		ret += _rb_dump_indents(fd, indent + 1);
+		len = snprintf(buff, sizeof(buff), "Left:  ");
+		len = write(fd, buff, len);
+		if (len > 0) {
+			ret += len;
+		}
+		ret += _rb_dump(tree, node->left,  fd, indent + 1);
+	}
+
+	/* return */
+	return ret;
 }
 
 
@@ -273,28 +391,28 @@ static void _node_clean_and_free_recursively(struct RbTreeNode *node)
 
 
 /* --------------------_node_is_black----------------------- */
-static inline BOOL _node_is_black(struct RbTreeNode *node)
+static inline BOOL _node_is_black(const struct RbTreeNode *node)
 {
 	return (Color_Black == node->color);
 }
 
 
 /* --------------------_node_is_red----------------------- */
-static inline BOOL _node_is_red(struct RbTreeNode *node)
+static inline BOOL _node_is_red(const struct RbTreeNode *node)
 {
 	return (Color_Black != node->color);
 }
 
 
 /* --------------------_node_is_root----------------------- */
-static inline BOOL _node_is_root(struct RbTreeNode *node)
+static inline BOOL _node_is_root(const struct RbTreeNode *node)
 {
 	return (NULL == node->parent);
 }
 
 
 /* --------------------_node_brother----------------------- */
-static struct RbTreeNode *_node_brother(struct RbTreeNode *node)
+static struct RbTreeNode *_node_brother(const struct RbTreeNode *node)
 {
 	if (_node_is_root(node)) {
 		return NULL;
@@ -1325,11 +1443,11 @@ int utilRbTree_SetData(struct UtilRbTree *tree, RbKey_t key, void *data, void *p
 	else if (_rb_is_checking(tree)) {
 		return _rb_err(RB_ERR_DURING_CHECK);
 	}
-	else {
-		struct RbTreeNode *node = NULL;
+	else {_RB_MARK();
+		struct RbTreeNode *node = NULL;_RB_MARK();
 		node = _node_search(tree, key);
 		if (node)
-		{
+		{_RB_MARK();
 			if (prevData) {
 				_node_get_data(tree, node, prevData);
 			}
@@ -1404,8 +1522,8 @@ int utilRbTree_DelData(struct UtilRbTree *tree, RbKey_t key, void *prevDataOut)
 }
 
 
-/* --------------------utilRbTree_CheckAllData----------------------- */
-int utilRbTree_CheckAllData(struct UtilRbTree *tree, RbCheck_t how, RbKey_t than, check_func callback, void *checkArg)
+/* --------------------utilRbTree_CheckData----------------------- */
+int utilRbTree_CheckData(struct UtilRbTree *tree, RbCheck_t how, RbKey_t than, check_func callback, void *checkArg)
 {
 	int ret = 0;
 
@@ -1474,6 +1592,45 @@ int utilRbTree_AbortCheck(struct UtilRbTree *tree)
 
 	_BITS_SET(tree->status, RbStatus_AbortCheck);
 	return 0;
+}
+
+
+/* --------------------utilRbTree_AbortCheck----------------------- */
+size_t utilRbTree_Dump(const struct UtilRbTree *tree, int fd)
+{
+	size_t ret = 0;
+	char buff[126];
+
+	if (fd <= 0) {
+		fd = 1;
+	}
+
+	if (NULL == tree)
+	{
+		const char *msg = utilRbTree_StrError(EINVAL);
+		size_t len = strlen(msg);
+		return write(fd, msg, len);
+	}
+	if (FALSE == _rb_initialized(tree))
+	{
+		const char *msg = utilRbTree_StrError(RB_ERR_NOT_INIT);
+		size_t len = strlen(msg);
+		return write(fd, msg, len);
+	}
+
+	/* para check OK */
+	if (0 == tree->count)
+	{
+		ret = snprintf(buff, sizeof(buff) - 1, "R-B Tree %p has no element.", tree);
+		ret = write(fd, buff, ret);
+		return (ret > 0) ? ret : 0;
+	}
+	else
+	{
+		ret = snprintf(buff, sizeof(buff) - 1, "R-B Tree %p with %ld element(s) status:\n", tree, (long)tree->count);
+		ret = write(fd, buff, ret);
+		return ret + _rb_dump(tree, tree->nodes, fd, 0);
+	}
 }
 
 

@@ -33,6 +33,7 @@
 #include <string.h>
 #include <time.h>
 #include <signal.h>
+#include <malloc.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -67,6 +68,9 @@ static void _callback_signal(struct AMCEpollEvent *theEvent, int signal, events_
 			_LOG("Ignore signal %d", signal);
 			break;
 		case SIGQUIT:
+			_LOG("Now malloc status:");
+			malloc_stats();
+			utilTimeout_Debug();
 			_LOG("Ignore signal %d", signal);
 			break;
 		case SIGINT:
@@ -76,7 +80,7 @@ static void _callback_signal(struct AMCEpollEvent *theEvent, int signal, events_
 			if (sigIntCount ++  > 5) {
 				_LOG("Abnormal!");
 				exit(1);
-			}			
+			}
 			break;
 		}
 	}

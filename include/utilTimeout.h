@@ -56,6 +56,8 @@ int
 	utilTimeout_GetSmallestTime(struct UtilTimeoutChain *chain, struct timespec *timeOut, void **objOut);
 struct timespec  
 	utilTimeout_GetSysupTime(void);
+void 
+	utilTimeout_Debug(void);
 
 
 #endif

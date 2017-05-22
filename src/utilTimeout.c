@@ -469,5 +469,143 @@ int utilTimeout_GetSmallestTime(struct UtilTimeoutChain *chain, struct timespec 
 #endif
 
 
+/*******/
+#define __RB_TREE_TEST_FUNCTIONS
+#if 1
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <string.h>
+
+/* --------------------utilTimeout_Debug----------------------- */
+#define DO_AND_TEST(x)	do{	\
+	int callStat = (x);	\
+	if (callStat < 0) {	\
+		ERROR("Failed in Line %d: %s", (int)__LINE__, utilRbTree_StrError(callStat));	\
+		return;	\
+	}	\
+}while(0)
+
+static uint8_t _rand_u8()
+{
+	uint8_t ret = 0;
+	ssize_t callStat = 0;
+	char errorMsg[128] = "";
+	int fd = open("/dev/urandom", O_RDONLY);
+
+	if (fd < 0) {
+		snprintf(errorMsg, sizeof(errorMsg), "Failed to open ramdom device: %s\n", strerror(errno));
+		goto ENDS;
+	}
+
+	callStat = read(fd, &(ret), sizeof(ret));
+	if (callStat < 0) {
+		snprintf(errorMsg, sizeof(errorMsg), "Failed to read from ramdom device: %s\n", strerror(errno));
+		goto ENDS;
+	}
+
+ENDS:
+	if (fd > 0) {
+		close(fd);
+		fd = -1;
+	}
+
+	if (errorMsg[0]) {
+		write(2, errorMsg, strlen(errorMsg));
+	}
+	
+	return ret;
+}
+
+static int _rand()
+{
+	uint32_t ret = 0;
+
+	ret += _rand_u8() << 0;
+	ret += _rand_u8() << 8;
+	ret += _rand_u8() << 16;
+	ret += _rand_u8() << 24;
+
+	return (int)(ret & 0x7FFFFFFF);
+}
+
+static int _rand_int(int minInt, int maxInt)
+{
+	int result;
+
+	if (minInt == maxInt)
+	{
+		result = minInt;
+	}
+	else
+	{
+		if (minInt > maxInt)
+		{
+			/* swap */
+			result = minInt;
+			minInt = maxInt;
+			maxInt = result;
+		}
+
+		/* randomize */
+		result = minInt + (int)((float)(maxInt - minInt + 1) * (float)(_rand() / (RAND_MAX + 1.0)));
+	}
+	return result;
+}
+
+void utilTimeout_Debug()
+{
+	struct UtilRbTree tree = {0};
+
+	utilRbTree_Clean(&tree);
+
+	DO_AND_TEST(utilRbTree_Init(&tree, 4));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 1, "0001", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 2, "0002", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 3, "0003", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 4, "0004", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 5, "0005", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 6, "0006", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 7, "0007", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 8, "0008", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 9, "0009", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 10, "0010", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 11, "0011", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 12, "0012", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 13, "0013", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 14, "0014", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 15, "0015", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 16, "0016", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 17, "0017", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 18, "0018", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 19, "0019", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 20, "0020", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 21, "0021", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 22, "0022", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 23, "0023", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 24, "0024", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 25, "0025", NULL));
+	DO_AND_TEST(utilRbTree_SetData(&tree, 26, "0026", NULL));
+	utilRbTree_Dump(&tree, 1);
+
+	/* test remove */
+	{
+		long tmp;
+		for (tmp = 0; tmp < 26; tmp ++)
+		{
+			utilRbTree_DelData(&tree, (RbKey_t)_rand_int(1, 26), NULL);
+		}
+	}
+
+	utilRbTree_Dump(&tree, 1);
+	utilRbTree_Clean(&tree);
+
+	return;
+}
+
+#endif
+
 /* EOF */
 

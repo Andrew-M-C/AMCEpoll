@@ -122,13 +122,15 @@ int
 int 
 	utilRbTree_DelData(struct UtilRbTree *tree, RbKey_t key, void *prevDataOut);
 int 
-	utilRbTree_CheckAllData(struct UtilRbTree *tree, RbCheck_t how, RbKey_t than, check_func callback, void *checkArg);
+	utilRbTree_CheckData(struct UtilRbTree *tree, RbCheck_t how, RbKey_t than, check_func callback, void *checkArg);
 int 
 	utilRbTree_FindMinimum(const struct UtilRbTree *tree, RbKey_t *keyOut, void *dataBuff);
 int 
 	utilRbTree_AbortCheck(struct UtilRbTree *tree);
 const char *
 	utilRbTree_StrError(int error);
+size_t 
+	utilRbTree_Dump(const struct UtilRbTree *tree, int fd);
 
 
 #endif
