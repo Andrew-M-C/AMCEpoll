@@ -309,12 +309,9 @@ int epEvent_DelFromBaseAndFree(struct AMCEpoll *base, struct AMCEpollEvent *even
 
 
 /* --------------------epEvent_InvokeCallback----------------------- */
-int epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvents)
+int epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvents, BOOL timeout)
 {
-	if (0 == epollEvents) {
-		ERROR("Empty event for %p", event);
-		return ep_err(EINVAL);
-	} else if (NULL == base) {
+	if (NULL == base) {
 		return ep_err(EINVAL);
 	} else if (NULL == event) {
 		return ep_err(EINVAL);
@@ -322,8 +319,7 @@ int epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, i
 		return ep_err(EBADF);
 	}
 	else {
-		
-		return (event->invoke_func)(base, event, epollEvents);
+		return (event->invoke_func)(base, event, epollEvents, timeout);
 	}
 }
 
@@ -333,6 +329,21 @@ struct AMCEpollEvent *epEvent_GetEvent(struct AMCEpoll *base, const char *key)
 {
 	return epEventIntnl_GetEvent(base, key);
 }
+
+
+/* --------------------epEvent_DetachTimeout----------------------- */
+int epEvent_DetachTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event)
+{
+	return epEventIntnl_DetachFromTimeoutChain(base, event);
+}
+
+
+/* --------------------epEvent_AttachTimeout----------------------- */
+int epEvent_AttachTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event)
+{
+	return epEventIntnl_AttachToTimeoutChain(base, event);
+}
+
 
 
 #endif

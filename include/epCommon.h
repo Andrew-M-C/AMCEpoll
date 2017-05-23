@@ -51,7 +51,7 @@ typedef int (*free_func)(struct AMCEpollEvent *event);
 typedef int (*genkey_func)(struct AMCEpollEvent *event, char *keyBuff, size_t nBuffLen);
 typedef int (*attach_func)(struct AMCEpoll *base, struct AMCEpollEvent *event);
 typedef int (*detach_func)(struct AMCEpoll *base, struct AMCEpollEvent *event);
-typedef int (*invoke_func)(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent);
+typedef int (*invoke_func)(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent, BOOL timeout);
 
 struct AMCEpollEvent {
 	int            fd;
@@ -61,7 +61,6 @@ struct AMCEpollEvent {
 	uint8_t        inter_data[INTERNAL_DATA_LEN];		/* internal data, reserved for different types of events */
 	int            epoll_events;
 	long           timeout;
-	BOOL           timeout_added;
 	events_t       events;
 	free_func      free_func;
 	genkey_func    genkey_func;
@@ -84,6 +83,8 @@ struct AMCEpoll {
 #define BITS_ANY_SET(val, bits)		(0 != ((val) & (bits)))
 #define BITS_ALL_SET(val, bits)		((bits) == ((val) & (bits)))
 #define BITS_HAVE_INTRSET(bitA, bitB)	((bitA) != ((bitA) & (~(bitB))))		/* The two bits have intersetion */
+#define BITS_SET(val, bits)			((val) |= (bits))
+#define BITS_CLR(val, bits)			((val) &= ~(bits))
 
 /* function */
 int ep_err(int err);

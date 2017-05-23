@@ -68,9 +68,13 @@ int
 int 
 	epEvent_DelFromBaseAndFree(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
-	epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvents);
+	epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvents, BOOL timeout);
 struct AMCEpollEvent *
 	epEvent_GetEvent(struct AMCEpoll *base, const char *key);
+int 
+	epEvent_DetachTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event);
+int 
+	epEvent_AttachTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event);
 
 #endif
 /* EOF */

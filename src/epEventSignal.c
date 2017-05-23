@@ -61,7 +61,7 @@ static int epEventSignal_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *
 static int epEventSignal_GenKey(struct AMCEpollEvent *event, char *keyOut, size_t nBuffLen);
 static int epEventSignal_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
 static int epEventSignal_Destroy(struct AMCEpollEvent *event);
-static int epEventSignal_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent);
+static int epEventSignal_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent, BOOL timeout);
 
 #endif
 
@@ -635,7 +635,7 @@ static int epEventSignal_Destroy(struct AMCEpollEvent *event)
 
 
 /* --------------------epEventSignal_InvokeCallback----------------------- */
-static int epEventSignal_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent)
+static int epEventSignal_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent, BOOL timeout)
 {
 	events_t userWhat = 0;
 	if (base && event && epollEvent)

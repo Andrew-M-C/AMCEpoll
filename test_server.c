@@ -70,7 +70,6 @@ static void _callback_signal(struct AMCEpollEvent *theEvent, int signal, events_
 		case SIGQUIT:
 			_LOG("Now malloc status:");
 			malloc_stats();
-			utilTimeout_Debug();
 			_LOG("Ignore signal %d", signal);
 			break;
 		case SIGINT:
@@ -368,12 +367,12 @@ static void _callback_accept(struct AMCEpollEvent *theEvent, int fd, events_t ev
 		close(fd);
 		fd = -1;
 	}
-	else if (events & EP_EVENT_ERROR) {
+	if (events & EP_EVENT_ERROR) {
 		_LOG("Error on fd %d", fd);
 		AMCEpoll_DelAndFreeEvent(base, theEvent);
 		fd = -1;
 	}
-	else if (events & EP_EVENT_READ) {
+	if (events & EP_EVENT_READ) {
 		BOOL isOK =TRUE;
 		int newFd = -1;
 		int callStat = 0;
@@ -427,6 +426,10 @@ static void _callback_accept(struct AMCEpollEvent *theEvent, int fd, events_t ev
 			}
 		}
 	}
+	if (events & EP_EVENT_TIMEOUT) {
+		_LOG("Timeout on fd %d", fd);
+	}
+
 	return;
 }
 
@@ -645,7 +648,7 @@ static int _create_local_server(struct AMCEpoll *base)
 
 	acceptEvent = AMCEpoll_NewEvent(fd, 
 					EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_EVENT_TIMEOUT, 
-					2000, _callback_accept, base);
+					5000, _callback_accept, base);
 	if (NULL == acceptEvent) {
 		_LOG("Failed to create event: %s", strerror(errno));
 		goto ERROR;
@@ -705,7 +708,7 @@ int main(int argc, char* argv[])
 		goto END;
 	}
 
-//	callStat = _create_dns_handler(base);
+	callStat = _create_dns_handler(base);
 	if (callStat < 0) {
 		goto END;
 	}

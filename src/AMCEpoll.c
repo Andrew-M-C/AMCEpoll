@@ -87,6 +87,130 @@ enum {
 #define __AMC_EPOLL_MAIN_LOOP
 #ifdef __AMC_EPOLL_MAIN_LOOP
 
+/* --------------------_loop_get_timeout_msec----------------------- */
+static long _loop_get_timeout_msec(struct AMCEpoll *base)
+{
+	long ret = 0;
+	ret = utilTimeout_MinimumSleepMilisecs(&(base->all_timeouts));
+	if (ret < 0) {
+		DEBUG("No timeout events");
+		ret = 1000;
+	}
+	else if (0 == ret) {
+		DEBUG("Next timeout event in 1 msec");
+		ret = 1;
+	}
+	else {
+		DEBUG("Next timeout event in %ld msec(s)", ret);
+	}
+	return ret;
+}
+
+
+/* --------------------_loop_handle_error----------------------- */
+static void _loop_handle_error(struct AMCEpoll *base, int error)
+{
+	if (EINTR == error) {
+		/* nothing needs to be done */
+	}
+	else {
+		ERROR("Failed in epoll_wait(): %s", strerror(error));
+		BITS_SET(base->base_status, EP_STAT_EPOLL_ERROR);
+	}
+	
+	return;
+}
+
+
+/* --------------------_dispatch_main_loop----------------------- */
+static void _loop_handle_timeout(struct AMCEpoll *base)
+{
+	struct timespec sysTime = utilTimeout_GetSysupTime();
+	struct timespec minTime = {0};
+	struct AMCEpollEvent *event = NULL;
+	int callStat = 0;
+	int compare = 0;
+	BOOL isDone = FALSE;
+
+	do {
+		callStat = utilTimeout_GetSmallestTime(&(base->all_timeouts), &minTime, &event);
+		if (callStat < 0) {
+			DEBUG("Enjoy your peace...");
+			isDone = TRUE;
+		}
+		else {
+			compare = utilTimeout_CompareTime(&minTime, &sysTime);
+			if (compare <= 0)
+			{
+				/* invoke callback */
+				epEvent_DetachTimeout(base, event);
+				epEvent_InvokeCallback(base, event, 0, TRUE);
+
+				/* add again */
+				if (FALSE == BITS_ALL_SET(event->events, EP_MODE_PERSIST))
+				{
+					epEvent_DelFromBase(base, event);
+				}
+				else
+				{
+					if (utilTimeout_ObjectExists(&(base->all_timeouts), event)) {
+						/* timeout already added by user. Nothing more needs to be done */
+					}
+					else {
+						/* User not added timeout event, let us add it for him/her. */
+						epEvent_AttachTimeout(base, event);
+					}
+				}
+			}
+			else {
+				isDone = TRUE;
+			}
+		}
+	}
+	while (FALSE == isDone);
+
+	return;
+}
+
+
+/* --------------------_dispatch_main_loop----------------------- */
+static void _loop_handle_events(struct AMCEpoll *base, struct epoll_event *evBuff, size_t nTotal)
+{
+	int epollWhat = 0;
+	size_t nIndex = 0;
+	struct AMCEpollEvent *amcEvent = NULL;
+
+	DEBUG("%d event(s) active", nTotal);
+
+	for (nIndex = 0; nIndex < nTotal; nIndex ++)
+	{
+		epollWhat = evBuff[nIndex].events;
+		amcEvent = (struct AMCEpollEvent *)(evBuff[nIndex].data.ptr);
+
+		if (amcEvent)
+		{
+			if (BITS_ALL_SET(amcEvent->events, EP_EVENT_TIMEOUT)) {
+				epEvent_DetachTimeout(base, amcEvent);
+			}
+		
+			epEvent_InvokeCallback(base, amcEvent, epollWhat, FALSE);
+			if (FALSE == BITS_ANY_SET(amcEvent->events, EP_MODE_PERSIST)) {
+				epEvent_DelFromBase(base, amcEvent);
+			}
+			else {
+				if (BITS_ALL_SET(amcEvent->events, EP_EVENT_TIMEOUT)) {
+					if (FALSE == utilTimeout_ObjectExists(&(base->all_timeouts), amcEvent)) {
+						epEvent_AttachTimeout(base, amcEvent);
+					}
+				}
+			}
+		}
+		// end of "if (amcEvent)"
+	}
+	// end of "for (nIndex = 0; nIndex < nTotal; nIndex ++)"
+}
+
+
 /* --------------------_dispatch_main_loop----------------------- */
 static int _dispatch_main_loop(struct AMCEpoll *base)
 {
@@ -94,85 +218,53 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 	int evFd = base->epoll_fd;
 	int evSize = base->epoll_buff_size;
 	int nTotal = 0;
-	int nIndex = 0;
 	int errCpy = 0;
 	long waitMilisec = 0;
 	BOOL shouldExit = FALSE;
 
 	base->base_status = 0;
-	base->base_status |= EP_STAT_RUNNING;
+	BITS_SET(base->base_status, EP_STAT_RUNNING);
 
 	/* This is actually a thread-like process */
-	do {
-		waitMilisec = utilTimeout_MinimumSleepMilisecs(&(base->all_timeouts));
-		if (waitMilisec < 0) {
-			DEBUG("No timeout events");
-			waitMilisec = 1000;
-		}
-		else {
-			DEBUG("Next timeout event in %ld sec(s)", waitMilisec);
-		}
-		
-		nTotal = epoll_wait(evFd, evBuff, evSize, waitMilisec);		// TODO: implement timeout
-		errCpy = errno;
+	while (FALSE == shouldExit)
+	{
+		/******/
+		/* invoke epoll */
+		waitMilisec = _loop_get_timeout_msec(base);
+		nTotal = epoll_wait(evFd, evBuff, evSize, waitMilisec);
+
+		/******/
+		/* handle epoll */
 		if (nTotal < 0) {
-			if (EINTR == errCpy) {
-				// TODO: Support signal events
-			}
-			else {
-				ERROR("Failed in epoll_wait(): %s", strerror(errCpy));
-				base->base_status |= EP_STAT_EPOLL_ERROR;
-				shouldExit = TRUE;
-			}
-		}
-		else if (0 == nTotal) {
-			// TODO: Add support
-			DEBUG("Enjoy your peace...");
-		}
-		else {
-			DEBUG("%d event(s) active", nTotal);
-			int epollWhat = 0;
-			struct AMCEpollEvent *amcEvent = NULL;
-			for (nIndex = 0; nIndex < nTotal; nIndex ++)
-			{
-				epollWhat = evBuff[nIndex].events;
-				amcEvent = (struct AMCEpollEvent *)(evBuff[nIndex].data.ptr);
-
-				if (amcEvent)
-				{
-					amcEvent->timeout_added = FALSE;
-					epEvent_InvokeCallback(base, amcEvent, epollWhat);
-					if ((FALSE == amcEvent->timeout_added) &&
-						(BITS_ANY_SET(amcEvent->events, EP_MODE_PERSIST | EP_EVENT_TIMEOUT)))
-					{
-						epEventIntnl_AttachToTimeoutChain(base, amcEvent);
-					}
-
-					if (FALSE == BITS_ANY_SET(amcEvent->events, EP_MODE_PERSIST)) {
-						epEvent_DelFromBase(base, amcEvent);
-					}
-				}
-			}
-			// end of "for (nIndex = 0; nIndex < nTotal; nIndex ++)"
+			_loop_handle_error(base, errno);
+		} else if (0 == nTotal) {
+			_loop_handle_timeout(base);
+		} else {
+			_loop_handle_events(base, evBuff, nTotal);
+			_loop_handle_timeout(base);
 		}
 		// end of "else (nTotal < 0) {..."
 
+		/******/
 		/* main loop status check */
-		if (BITS_ANY_SET(base->base_status, EP_STAT_SHOULD_EXIT)) {
+		if (BITS_ANY_SET(base->base_status, EP_STAT_SHOULD_EXIT | EP_STAT_EPOLL_ERROR))
+		{
 			shouldExit = TRUE;
 		}
-	} while (FALSE == shouldExit);
-	// end of "do - while (FALSE == shouldExit)"
+	}
+	// end of "while (FALSE == shouldExit)"
 
 	/* clean status */
-	base->base_status &= ~(EP_STAT_SHOULD_EXIT | EP_STAT_RUNNING);
+	BITS_CLR(base->base_status, EP_STAT_SHOULD_EXIT | EP_STAT_RUNNING);
 
 	/* return */
-	if (base->base_status & EP_STAT_EPOLL_ERROR) {
+	if (BITS_ANY_SET(base->base_status, EP_STAT_EPOLL_ERROR))
+	{
+		BITS_CLR(base->base_status, EP_STAT_EPOLL_ERROR);
 		return ep_err(errCpy);
 	}
 	else {
-		return 0;
+		return ep_err(0);
 	}
 }
 

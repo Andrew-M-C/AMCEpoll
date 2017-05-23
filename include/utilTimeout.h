@@ -59,6 +59,8 @@ int
 	utilTimeout_Clean(struct UtilTimeoutChain *chain);
 int 
 	utilTimeout_SetObject(struct UtilTimeoutChain *chain, struct AMCEpollEvent *event, struct timespec inTime);
+BOOL 
+	utilTimeout_ObjectExists(struct UtilTimeoutChain *chain, struct AMCEpollEvent *event);
 int 
 	utilTimeout_DelObject(struct UtilTimeoutChain *chain, struct AMCEpollEvent *event);
 int 
@@ -69,6 +71,8 @@ struct timespec
 	utilTimeout_TimespecFromMilisecs(long milisecs);
 signed long 
 	utilTimeout_MinimumSleepMilisecs(struct UtilTimeoutChain *chain);
+int 
+	utilTimeout_CompareTime(const struct timespec *left, const struct timespec *right);
 void 
 	utilTimeout_Debug(void);
 

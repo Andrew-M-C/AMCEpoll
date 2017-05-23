@@ -52,7 +52,7 @@ int epEventFd_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int epEventFd_GenKey(struct AMCEpollEvent *event, char *keyOut, size_t nBuffLen);
 int epEventFd_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int epEventFd_Destroy(struct AMCEpollEvent *event);
-int epEventFd_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent);
+int epEventFd_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent, BOOL timeout);
 
 #endif
 
@@ -278,7 +278,6 @@ struct AMCEpollEvent *epEventFd_Create(int fd, events_t events, long timeout, ev
 	newEvent->user_data = userData;
 	newEvent->epoll_events = _epoll_code_from_amc_code(events);
 	newEvent->timeout = timeout;
-	newEvent->timeout_added = FALSE;
 	newEvent->events = events;
 	newEvent->free_func = epEventFd_Destroy;
 	newEvent->genkey_func = epEventFd_GenKey;
@@ -386,12 +385,19 @@ int epEventFd_Destroy(struct AMCEpollEvent *event)
 
 
 /* --------------------epEventFd_InvokeCallback----------------------- */
-int epEventFd_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent)
+int epEventFd_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent, BOOL timeout)
 {
 	events_t userWhat = 0;
-	if (base && event && epollEvent)
+	if (base && event)
 	{
-		userWhat = _amc_code_from_epoll_code(epollEvent);
+		if (timeout) {
+			userWhat = EP_EVENT_TIMEOUT;
+		} else if (epollEvent) {
+			userWhat = _amc_code_from_epoll_code(epollEvent);
+		} else {
+			return ep_err(EINVAL);
+		}
+		
 		if (BITS_HAVE_INTRSET(userWhat, event->events)) {
 			epEventIntnl_InvokeUserCallback(event, event->fd, userWhat);
 		}

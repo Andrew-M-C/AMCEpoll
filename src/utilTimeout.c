@@ -132,7 +132,7 @@ static int _add_new_object(struct UtilTimeoutChain *chain, void *obj, struct tim
 	if (-RB_ERR_NO_FOUND == callStat)
 	{
 		/* no data exists at this time, just add it */
-		DEBUG("Add new time %04%ld.%09%ld", (long)(time->tv_sec), (long)(time->tv_nsec));
+		DEBUG("Add new time %04ld.%09ld", (long)(time->tv_sec), (long)(time->tv_nsec));
 		objValue.next = NULL;
 		objValue.obj  = obj;
 
@@ -326,20 +326,67 @@ static int _del_object(struct UtilTimeoutChain *chain, void *obj)
 #define __GENERAL_INTERNAL_FUNCTIONS
 #if 1
 
+
+/* --------------------_timespec_comp----------------------- */
+int _timespec_comp(const struct timespec *left, const struct timespec *right)
+{
+	if (left->tv_sec < right->tv_sec) {
+		return -1;
+	}
+	else if (left->tv_sec == right->tv_sec)
+	{
+		if (left->tv_nsec < right->tv_nsec) {
+			return -1;
+		}
+		else if (left->tv_nsec == right->tv_nsec) {
+			return 0;
+		}
+		else {
+			return 1;
+		}
+	}
+	else {
+		return 1;
+	}
+}
+
+
 /* --------------------_timespec_sub----------------------- */
 static void _timespec_sub(struct timespec *result, struct timespec *a, struct timespec *b)
 {
-	struct timespec resCopy = {0};
-	if (a->tv_nsec < b->tv_nsec) {
-		resCopy.tv_nsec = a->tv_nsec + 1000000000 - b->tv_nsec;
-		resCopy.tv_sec = a->tv_sec - 1 - b->tv_sec;
+	struct timespec resCopy = {0, 0};
+	int comp = _timespec_comp(a, b);
+
+	if (comp > 0) {
+		if (a->tv_nsec < b->tv_nsec) {
+			resCopy.tv_nsec = a->tv_nsec + 1000000000 - b->tv_nsec;
+			resCopy.tv_sec = a->tv_sec - 1 - b->tv_sec;
+		}
+		else {
+			resCopy.tv_nsec = a->tv_nsec + 1000000000 - b->tv_nsec;
+			resCopy.tv_sec = a->tv_sec - 1 - b->tv_sec;
+		}
+
+		result->tv_sec  = resCopy.tv_sec;
+		result->tv_nsec = resCopy.tv_nsec;
+	}
+	else if (comp < 0) {
+		if (b->tv_nsec < a->tv_nsec) {
+			resCopy.tv_nsec = b->tv_nsec + 1000000000 - a->tv_nsec;
+			resCopy.tv_sec = b->tv_sec - 1 - a->tv_sec;
+		}
+		else {
+			resCopy.tv_nsec = b->tv_nsec + 1000000000 - a->tv_nsec;
+			resCopy.tv_sec = b->tv_sec - 1 - a->tv_sec;
+		}
+
+		result->tv_sec  = -(resCopy.tv_sec);
+		result->tv_nsec = -(resCopy.tv_nsec);
 	}
 	else {
-		resCopy.tv_nsec = a->tv_nsec + 1000000000 - b->tv_nsec;
-		resCopy.tv_sec = a->tv_sec - 1 - b->tv_sec;
+		/* all zero */
 	}
-	result->tv_sec  = resCopy.tv_sec;
-	result->tv_nsec = resCopy.tv_nsec;
+	
 	return;
 }
 
@@ -449,7 +496,6 @@ int utilTimeout_SetObject(struct UtilTimeoutChain *chain, struct AMCEpollEvent *
 			return utilTimeout_DelObject(chain, event);
 		}
 		else {
-			int callStat = 0;
 			struct timespec target = utilTimeout_GetSysupTime();
 			uint64_t nsec = inTime.tv_nsec + target.tv_nsec;
 			if (nsec >= 1000000000) {
@@ -462,11 +508,31 @@ int utilTimeout_SetObject(struct UtilTimeoutChain *chain, struct AMCEpollEvent *
 			}
 			
 			DEBUG("Add timeout item: %04ld.%09ld --> %p", (long)(target.tv_sec), (long)(target.tv_nsec), event);
-			callStat = _set_object(chain, event, &target);
-			if (0 == callStat) {
-				event->timeout_added = TRUE;
-			}
-			return callStat;
+			return _set_object(chain, event, &target);
+		}
+	}
+}
+
+
+/* --------------------utilTimeout_ObjectExists----------------------- */
+BOOL utilTimeout_ObjectExists(struct UtilTimeoutChain *chain, struct AMCEpollEvent *event)
+{
+	if (NULL == chain) {
+		return FALSE;
+	}
+	if (NULL == event) {
+		return FALSE;
+	}
+	else {
+		int callStat = 0;
+		RbKey_t objKey = _rbKey_from_objptr(event);
+
+		callStat = utilRbTree_GetData(&(chain->obj_time_chain), objKey, NULL);
+		if (0 == callStat) {
+			return TRUE;
+		}
+		else {
+			return FALSE;
 		}
 	}
 }
@@ -565,6 +631,9 @@ signed long utilTimeout_MinimumSleepMilisecs(struct UtilTimeoutChain *chain)
 			return _milisecs_from_timespec(&diffTime);
 		}
 		else {
+			DEBUG("Curr: %04ld.%09ld  |  Diff: %04ld.%09ld",
+					(long)currTime.tv_sec, (long)currTime.tv_nsec,
+					(long)diffTime.tv_sec, (long)diffTime.tv_nsec);
 			return 0;
 		}
 	}
@@ -573,6 +642,18 @@ signed long utilTimeout_MinimumSleepMilisecs(struct UtilTimeoutChain *chain)
 		return -1;
 	}
 }
+
+
+/* --------------------utilTimeout_CompareTime----------------------- */
+int utilTimeout_CompareTime(const struct timespec *left, const struct timespec *right)
+{
+	if (left && right) {
+		return _timespec_comp(left, right);
+	} else {
+		return 0;
+	}
+}
+
 
 #endif
 
