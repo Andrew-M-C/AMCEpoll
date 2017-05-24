@@ -355,37 +355,17 @@ int _timespec_comp(const struct timespec *left, const struct timespec *right)
 static void _timespec_sub(struct timespec *result, struct timespec *a, struct timespec *b)
 {
 	struct timespec resCopy = {0, 0};
-	int comp = _timespec_comp(a, b);
-
-	if (comp > 0) {
-		if (a->tv_nsec < b->tv_nsec) {
-			resCopy.tv_nsec = a->tv_nsec + 1000000000 - b->tv_nsec;
-			resCopy.tv_sec = a->tv_sec - 1 - b->tv_sec;
-		}
-		else {
-			resCopy.tv_nsec = a->tv_nsec + 1000000000 - b->tv_nsec;
-			resCopy.tv_sec = a->tv_sec - 1 - b->tv_sec;
-		}
-
-		result->tv_sec  = resCopy.tv_sec;
-		result->tv_nsec = resCopy.tv_nsec;
-	}
-	else if (comp < 0) {
-		if (b->tv_nsec < a->tv_nsec) {
-			resCopy.tv_nsec = b->tv_nsec + 1000000000 - a->tv_nsec;
-			resCopy.tv_sec = b->tv_sec - 1 - a->tv_sec;
-		}
-		else {
-			resCopy.tv_nsec = b->tv_nsec + 1000000000 - a->tv_nsec;
-			resCopy.tv_sec = b->tv_sec - 1 - a->tv_sec;
-		}
-
-		result->tv_sec  = -(resCopy.tv_sec);
-		result->tv_nsec = -(resCopy.tv_nsec);
+	if (a->tv_nsec < b->tv_nsec) {
+		resCopy.tv_nsec = a->tv_nsec + 1000000000 - b->tv_nsec;
+		resCopy.tv_sec = a->tv_sec - 1 - b->tv_sec;
 	}
 	else {
-		/* all zero */
+		resCopy.tv_nsec = a->tv_nsec + 1000000000 - b->tv_nsec;
+		resCopy.tv_sec = a->tv_sec - 1 - b->tv_sec;
 	}
+
+	result->tv_sec  = resCopy.tv_sec;
+	result->tv_nsec = resCopy.tv_nsec;
 	
 	return;
 }
@@ -620,21 +600,18 @@ signed long utilTimeout_MinimumSleepMilisecs(struct UtilTimeoutChain *chain)
 
 	callStat = utilTimeout_GetSmallestTime(chain, &nextTime, &event);
 	if (0 == callStat) {
+		int comp = 0;
 		struct timespec diffTime = {0};
 		struct timespec currTime = utilTimeout_GetSysupTime();
 
-		_timespec_sub(&diffTime, &nextTime, &currTime);
-
-		if ((diffTime.tv_sec >= 0)
-			&& (diffTime.tv_nsec >= 0))
-		{
-			return _milisecs_from_timespec(&diffTime);
+		comp = _timespec_comp(&nextTime, &currTime);
+		if (comp < 0) {
+			DEBUG("Curr: %04ld.%09ld  |  Min: %04ld.%09ld", (long)currTime.tv_sec, (long)currTime.tv_nsec, (long)nextTime.tv_sec, (long)nextTime.tv_nsec);
+			return 0;
 		}
 		else {
-			DEBUG("Curr: %04ld.%09ld  |  Diff: %04ld.%09ld",
-					(long)currTime.tv_sec, (long)currTime.tv_nsec,
-					(long)diffTime.tv_sec, (long)diffTime.tv_nsec);
-			return 0;
+			_timespec_sub(&diffTime, &nextTime, &currTime);
+			return _milisecs_from_timespec(&diffTime);
 		}
 	}
 	else {

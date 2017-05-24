@@ -648,7 +648,7 @@ static int _create_local_server(struct AMCEpoll *base)
 
 	acceptEvent = AMCEpoll_NewEvent(fd, 
 					EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_EVENT_TIMEOUT, 
-					5000, _callback_accept, base);
+					1000, _callback_accept, base);
 	if (NULL == acceptEvent) {
 		_LOG("Failed to create event: %s", strerror(errno));
 		goto ERROR;
