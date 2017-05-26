@@ -550,7 +550,7 @@ static int _create_dns_handler(struct AMCEpoll *base)
 	}
 
 	newEvent = AMCEpoll_NewEvent(fd, EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_EVENT_TIMEOUT, 
-								-1, _callback_dns, base);
+								1000, _callback_dns, base);
 	if (NULL == newEvent) {
 		_LOG("Failed to create event: %s", strerror(errno));
 		goto ERROR;

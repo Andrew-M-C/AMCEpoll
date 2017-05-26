@@ -54,7 +54,7 @@ typedef int (*detach_func)(struct AMCEpoll *base, struct AMCEpollEvent *event);
 typedef int (*invoke_func)(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent, BOOL timeout);
 
 struct AMCEpollEvent {
-	const char     *description;
+	char           description[32];
 	int            fd;
 	ev_callback    callback;
 	void          *user_data;

@@ -207,17 +207,24 @@ struct AMCEpollEvent *epEventIntnl_GetEvent(struct AMCEpoll *base, const char *k
 /* --------------------epEvent_New----------------------- */
 struct AMCEpollEvent *epEvent_New(int fd, events_t what, long timeout, ev_callback callback, void *userData)
 {
+	struct AMCEpollEvent *ret = NULL;
+
 	if (epEventFd_IsFileEvent(what)) {
-		return epEventFd_Create(fd, what, timeout, callback, userData);
+		ret = epEventFd_Create(fd, what, timeout, callback, userData);
 	}
-	if (epEventSignal_IsSignalEvent(what)) {
-		return epEventSignal_Create(fd, what, timeout, callback, userData);
+	else if (epEventSignal_IsSignalEvent(what)) {
+		ret = epEventSignal_Create(fd, what, timeout, callback, userData);
 	}
-	// TODO:
+	// TODO: support other events
 	else {
 		errno = EINVAL;
 		return NULL;
 	}
+
+	if (ret) {
+		DEBUG("Create %s", ret->description);
+	}
+	return ret;
 }
 
 

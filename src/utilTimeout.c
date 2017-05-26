@@ -194,7 +194,7 @@ static int _set_object(struct UtilTimeoutChain *chain, void *obj, struct timespe
 	RbKey_t timeKey = _rbkey_from_timespec(time);
 	RbKey_t objKey  = _rbKey_from_objptr(obj);
 
-	_TM_DB("Add time %04ld.%09ld, object %s %d", (long)(time->tv_sec), (long)(time->tv_nsec), ((struct AMCEpollEvent *)obj)->description, ((struct AMCEpollEvent *)obj)->fd);
+	_TM_DB("Add time %04ld.%09ld, object %s", (long)(time->tv_sec), (long)(time->tv_nsec), ((struct AMCEpollEvent *)obj)->description);
 
 	callStat = utilRbTree_GetData(&(chain->obj_time_chain), objKey, &timeValue);
 	/* add new object */
@@ -312,10 +312,10 @@ static int _del_object(struct UtilTimeoutChain *chain, void *obj)
 			}
 		} while(next);
 
-		_TM_DB("Del time %04ld.%09ld, object %s %d", 
+		_TM_DB("Del time %04ld.%09ld, object %s", 
 				(long)(_timespec_from_rbkey(timeValue.time).tv_sec), 
 				(long)(_timespec_from_rbkey(timeValue.time).tv_nsec), 
-				((struct AMCEpollEvent *)obj)->description, ((struct AMCEpollEvent *)obj)->fd);
+				((struct AMCEpollEvent *)obj)->description);
 
 		return ep_err(0);
 	}
@@ -493,8 +493,8 @@ int utilTimeout_SetObject(struct UtilTimeoutChain *chain, struct AMCEpollEvent *
 				target.tv_nsec = (long)(nsec);
 			}
 			
-			_TM_DB("Add timeout item %s %d: %04ld.%09ld <-- %04ld.%09ld", 
-						event->description, event->fd, 
+			_TM_DB("Add timeout item %s: %04ld.%09ld <-- %04ld.%09ld", 
+						event->description, 
 						(long)(target.tv_sec), (long)(target.tv_nsec),
 						(long)(inTime.tv_sec), (long)(inTime.tv_nsec));
 			ret = _set_object(chain, event, &target);
@@ -656,8 +656,14 @@ int utilTimeout_CompareTime(const struct timespec *left, const struct timespec *
 
 /*******/
 #define __RB_TREE_TEST_FUNCTIONS
-#if 1
+#ifndef _TIMEOUT_DEBUG_FLAG
 
+void utilTimeout_Debug(struct UtilTimeoutChain *chain)
+{
+	return;
+}
+
+#else
 #include <string.h>
 static void _check_time_obj_chain(const struct RbCheckPara *para, void *arg)
 {
@@ -672,7 +678,7 @@ static void _check_time_obj_chain(const struct RbCheckPara *para, void *arg)
 	while(eventEach)
 	{
 		struct AMCEpollEvent *event = (struct AMCEpollEvent *)(eventEach->obj);
-		_TM_DB("\t[%02ld] %04ld.%09ld: %s %d", (long)(*count), (long)time.tv_sec, (long)time.tv_nsec, event->description, event->fd);
+		_TM_DB("\t[%02ld] %04ld.%09ld: %s", (long)(*count), (long)time.tv_sec, (long)time.tv_nsec, event->description);
 		*count += 1;
 		eventEach = eventEach->next;
 	}
@@ -692,7 +698,7 @@ static void _check_obj_time_chain(const struct RbCheckPara *para, void *arg)
 	time = _timespec_from_rbkey(timeObj.time);
 	event = _objptr_from_rbkey(para->key);
 
-	_TM_DB("\t[%02ld] %04ld.%09ld: %s %d", (long)(*count), (long)time.tv_sec, (long)time.tv_nsec, event->description, event->fd);
+	_TM_DB("\t[%02ld] %04ld.%09ld: %s", (long)(*count), (long)time.tv_sec, (long)time.tv_nsec, event->description);
 
 	*count += 1;
 	return;

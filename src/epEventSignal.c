@@ -525,7 +525,7 @@ struct AMCEpollEvent *epEventSignal_Create(int sig, events_t events, long timeou
 	sigPipe = (struct EpSigPipe *)(newEvent->inter_data);
 	sigPipe->fd[PIPE_READ]  = -1;
 	sigPipe->fd[PIPE_WRITE] = -1;
-	newEvent->description = EVENT_SIGNAL_DESCRIPTION;
+	snprintf(newEvent->description, sizeof(newEvent->description), EVENT_SIGNAL_DESCRIPTION" %d", sig);
 	newEvent->fd = sig;
 	newEvent->callback = callback;
 	newEvent->user_data = userData;
@@ -615,7 +615,14 @@ static int epEventSignal_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEv
 			return callStat;
 		}
 
-		return epEventIntnl_DetachFromBase(base, event);
+		callStat = epEventIntnl_DetachFromBase(base, event);
+		if (callStat < 0) {
+			ERROR("Failed to detach event %s from base", event->description);
+			return callStat;
+		}
+
+		callStat = epEventIntnl_DetachFromTimeoutChain(base, event);
+		return callStat;
 	}
 	return -1;
 }

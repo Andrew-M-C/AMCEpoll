@@ -133,7 +133,7 @@ static void _loop_handle_timeout(struct AMCEpoll *base)
 	int compare = 0;
 	BOOL isDone = FALSE;
 
-	utilTimeout_Debug(&(base->all_timeouts));
+	//utilTimeout_Debug(&(base->all_timeouts));
 
 	do {
 		callStat = utilTimeout_GetSmallestTime(&(base->all_timeouts), &minTime, &event);
@@ -145,9 +145,9 @@ static void _loop_handle_timeout(struct AMCEpoll *base)
 			compare = utilTimeout_CompareTime(&minTime, &sysTime);
 			if (compare <= 0)
 			{
-				DEBUG("<%04ld.%09ld> %s %d timeout at %04ld.%09ld", 
+				DEBUG("<%04ld.%09ld> %s timeout at %04ld.%09ld", 
 						(long)(sysTime.tv_sec), (long)(sysTime.tv_nsec),
-						event->description, event->fd, 
+						event->description, 
 						(long)(minTime.tv_sec), (long)(minTime.tv_nsec));
 			
 				/* invoke callback */
