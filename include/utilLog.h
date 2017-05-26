@@ -50,7 +50,7 @@ enum {
 #define ERROR(fmt, args...)		utilLog(LOG_LV_ERR, __FILE__" %d: "fmt, __LINE__, ##args)
 #define CRIT(fmt, args...)		utilLog(LOG_LV_CRIT, __FILE__" %d: "fmt, __LINE__, ##args)
 #define ALERT(fmt, args...)		utilLog(LOG_LV_ALERT, __FILE__" %d: "fmt, __LINE__, ##args)
-#define EMERG(fmt, args...)		utilLog(LOG_LV_EMERG, __FILE__" %d: "fmt, __LINE__, ##args)
+#define EMERG(fmt, args...)		do{utilLog(LOG_LV_EMERG, __FILE__" %d: "fmt, __LINE__, ##args);exit(1);}while(0)
 
 #define MARK()			DEBUG("<<< MARK >>>")
 

@@ -30,6 +30,8 @@
 #include "epCommon.h"
 #include <errno.h>
 
+#define EVENT_FILE_DESCRIPTION		"file event"
+
 struct AMCEpollEvent *
 	epEventFd_Create(int fd, events_t events, long timeout, ev_callback callback, void *userData);
 BOOL 

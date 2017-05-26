@@ -74,7 +74,7 @@ signed long
 int 
 	utilTimeout_CompareTime(const struct timespec *left, const struct timespec *right);
 void 
-	utilTimeout_Debug(void);
+	utilTimeout_Debug(struct UtilTimeoutChain *chain);
 
 
 #endif

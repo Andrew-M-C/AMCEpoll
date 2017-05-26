@@ -53,6 +53,7 @@ enum {
 	PIPE_WRITE = 1,
 };
 
+#define CFG_SIGNAL_TIMEOUT_MSEC		(5000)
 
 /* ------------------------------------------- */
 static void _callback_signal(struct AMCEpollEvent *theEvent, int signal, events_t events, void *arg)
@@ -83,8 +84,9 @@ static void _callback_signal(struct AMCEpollEvent *theEvent, int signal, events_
 			break;
 		}
 	}
-	else {
-		_LOG("Unsupported event: 0x%x", (int)events);
+	if (events & EP_EVENT_TIMEOUT)
+	{
+		_LOG("Timeout for signal %s", strsignal(signal));
 	}
 
 	return;
@@ -96,8 +98,8 @@ static int _create_signal_handler(struct AMCEpoll *base, int sigNum)
 {
 	int callStat = 0;
 	struct AMCEpollEvent *sigEvent = AMCEpoll_NewEvent(sigNum, 
-												EP_MODE_PERSIST | EP_EVENT_SIGNAL, 
-												-1, _callback_signal, base);
+												EP_MODE_PERSIST | EP_EVENT_SIGNAL | EP_EVENT_TIMEOUT, 
+												CFG_SIGNAL_TIMEOUT_MSEC, _callback_signal, base);
 	if (NULL == sigEvent) {
 		_LOG("Failed to create sigEvent: %s", strerror(errno));
 		return -1;
@@ -502,6 +504,9 @@ static void _callback_dns(struct AMCEpollEvent *event, int fd, events_t what, vo
 		_LOG("DNS free, close fd %d", fd);
 		close(fd);
 	}
+	if (what & EP_EVENT_TIMEOUT) {
+		_LOG("DNS timeout");
+	}
 	
 	return;
 }
@@ -601,6 +606,8 @@ ERROR:
 #define __SERVER_PREPARATION
 #ifdef __SERVER_PREPARATION
 
+#define CFG_ACCEPT_TIMEOUT_MSEC		(3000)
+
 /* ------------------------------------------- */
 static int _create_local_server(struct AMCEpoll *base)
 {
@@ -648,7 +655,7 @@ static int _create_local_server(struct AMCEpoll *base)
 
 	acceptEvent = AMCEpoll_NewEvent(fd, 
 					EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_EVENT_TIMEOUT, 
-					1000, _callback_accept, base);
+					CFG_ACCEPT_TIMEOUT_MSEC, _callback_accept, base);
 	if (NULL == acceptEvent) {
 		_LOG("Failed to create event: %s", strerror(errno));
 		goto ERROR;

@@ -273,6 +273,7 @@ struct AMCEpollEvent *epEventFd_Create(int fd, events_t events, long timeout, ev
 		goto ENDS;
 	}
 
+	newEvent->description = EVENT_FILE_DESCRIPTION;
 	newEvent->fd = fd;
 	newEvent->callback = callback;
 	newEvent->user_data = userData;

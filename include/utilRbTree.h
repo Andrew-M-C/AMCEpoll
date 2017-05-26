@@ -121,6 +121,8 @@ int
 	utilRbTree_GetData(const struct UtilRbTree *tree, RbKey_t key, void *dataBuff);
 int 
 	utilRbTree_DelData(struct UtilRbTree *tree, RbKey_t key, void *prevDataOut);
+size_t 
+	utilRbTree_GetNodeCount(const struct UtilRbTree *tree);
 int 
 	utilRbTree_CheckData(struct UtilRbTree *tree, RbCheck_t how, RbKey_t than, check_func callback, void *checkArg);
 int 

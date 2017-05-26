@@ -57,11 +57,11 @@ struct TimeItem {
 
 
 #ifdef _TIMEOUT_DEBUG_FLAG
-#define _TM_DB(fmt, args...)		printf("[TME - %04d] "fmt"\n", (int)__LINE__, ##args)
+#define _TM_DB(fmt, args...)		DEBUG(fmt, ##args)
 #define _TM_MARK()					_TM_DB("--- MARK ---");
 #else
 #define _TM_DB(fmt, args...)
-#define _TM_DB()
+#define _TM_MARK()
 #endif
 
 
@@ -132,7 +132,7 @@ static int _add_new_object(struct UtilTimeoutChain *chain, void *obj, struct tim
 	if (-RB_ERR_NO_FOUND == callStat)
 	{
 		/* no data exists at this time, just add it */
-		DEBUG("Add new time %04ld.%09ld", (long)(time->tv_sec), (long)(time->tv_nsec));
+		_TM_DB("Add new time %04ld.%09ld", (long)(time->tv_sec), (long)(time->tv_nsec));
 		objValue.next = NULL;
 		objValue.obj  = obj;
 
@@ -194,7 +194,7 @@ static int _set_object(struct UtilTimeoutChain *chain, void *obj, struct timespe
 	RbKey_t timeKey = _rbkey_from_timespec(time);
 	RbKey_t objKey  = _rbKey_from_objptr(obj);
 
-	_TM_DB("Add timeKey %llx, objKey %llx", (long long)timeKey, (long long)objKey);
+	_TM_DB("Add time %04ld.%09ld, object %s %d", (long)(time->tv_sec), (long)(time->tv_nsec), ((struct AMCEpollEvent *)obj)->description, ((struct AMCEpollEvent *)obj)->fd);
 
 	callStat = utilRbTree_GetData(&(chain->obj_time_chain), objKey, &timeValue);
 	/* add new object */
@@ -266,14 +266,14 @@ static int _del_object(struct UtilTimeoutChain *chain, void *obj)
 
 	callStat = utilRbTree_DelData(&(chain->obj_time_chain), objKey, &timeValue);
 	if (-RB_ERR_NO_FOUND == callStat) {
-		WARN("Failed to locat timeout object %p", obj);
+//		WARN("Failed to locate timeout object %p", obj);
 		return ep_err(ENOENT);
 	}
 
 	timeKey = timeValue.time;
 	callStat = utilRbTree_GetData(&(chain->time_obj_chain), timeKey, &objValue);
 	if (-RB_ERR_NO_FOUND == callStat) {
-		WARN("Failed to locat timeout object %p in obj chain", obj);
+//		WARN("Failed to locate timeout object %p in obj chain", obj);
 		return ep_err(ENOENT);
 	}
 
@@ -311,6 +311,11 @@ static int _del_object(struct UtilTimeoutChain *chain, void *obj)
 				break;
 			}
 		} while(next);
+
+		_TM_DB("Del time %04ld.%09ld, object %s %d", 
+				(long)(_timespec_from_rbkey(timeValue.time).tv_sec), 
+				(long)(_timespec_from_rbkey(timeValue.time).tv_nsec), 
+				((struct AMCEpollEvent *)obj)->description, ((struct AMCEpollEvent *)obj)->fd);
 
 		return ep_err(0);
 	}
@@ -476,6 +481,7 @@ int utilTimeout_SetObject(struct UtilTimeoutChain *chain, struct AMCEpollEvent *
 			return utilTimeout_DelObject(chain, event);
 		}
 		else {
+			int ret = 0;
 			struct timespec target = utilTimeout_GetSysupTime();
 			uint64_t nsec = inTime.tv_nsec + target.tv_nsec;
 			if (nsec >= 1000000000) {
@@ -487,8 +493,16 @@ int utilTimeout_SetObject(struct UtilTimeoutChain *chain, struct AMCEpollEvent *
 				target.tv_nsec = (long)(nsec);
 			}
 			
-			DEBUG("Add timeout item: %04ld.%09ld --> %p", (long)(target.tv_sec), (long)(target.tv_nsec), event);
-			return _set_object(chain, event, &target);
+			_TM_DB("Add timeout item %s %d: %04ld.%09ld <-- %04ld.%09ld", 
+						event->description, event->fd, 
+						(long)(target.tv_sec), (long)(target.tv_nsec),
+						(long)(inTime.tv_sec), (long)(inTime.tv_nsec));
+			ret = _set_object(chain, event, &target);
+#ifdef _TIMEOUT_DEBUG_FLAG
+			_TM_DB("After del:");
+			utilTimeout_Debug(chain);
+#endif
+			return ret;
 		}
 	}
 }
@@ -531,7 +545,12 @@ int utilTimeout_DelObject(struct UtilTimeoutChain *chain, struct AMCEpollEvent *
 		return ep_err(ENOENT);
 	}
 	else {
-		return _del_object(chain, event);
+		int ret = _del_object(chain, event);
+#ifdef _TIMEOUT_DEBUG_FLAG
+		_TM_DB("After del:");
+		utilTimeout_Debug(chain);
+#endif
+		return ret;
 	}
 }
 
@@ -606,7 +625,7 @@ signed long utilTimeout_MinimumSleepMilisecs(struct UtilTimeoutChain *chain)
 
 		comp = _timespec_comp(&nextTime, &currTime);
 		if (comp < 0) {
-			DEBUG("Curr: %04ld.%09ld  |  Min: %04ld.%09ld", (long)currTime.tv_sec, (long)currTime.tv_nsec, (long)nextTime.tv_sec, (long)nextTime.tv_nsec);
+			_TM_DB("Curr: %04ld.%09ld  |  Min: %04ld.%09ld", (long)currTime.tv_sec, (long)currTime.tv_nsec, (long)nextTime.tv_sec, (long)nextTime.tv_nsec);
 			return 0;
 		}
 		else {
@@ -639,13 +658,72 @@ int utilTimeout_CompareTime(const struct timespec *left, const struct timespec *
 #define __RB_TREE_TEST_FUNCTIONS
 #if 1
 
+#include <string.h>
+static void _check_time_obj_chain(const struct RbCheckPara *para, void *arg)
+{
+	struct ObjItem eventObj = {0};
+	struct ObjItem *eventEach = &eventObj;
+	struct timespec time = {0};
+	size_t *count = (size_t *)arg;
+
+	memcpy(&eventObj, para->data, sizeof(eventObj));
+	time = _timespec_from_rbkey(para->key);
+
+	while(eventEach)
+	{
+		struct AMCEpollEvent *event = (struct AMCEpollEvent *)(eventEach->obj);
+		_TM_DB("\t[%02ld] %04ld.%09ld: %s %d", (long)(*count), (long)time.tv_sec, (long)time.tv_nsec, event->description, event->fd);
+		*count += 1;
+		eventEach = eventEach->next;
+	}
+
+	return;
+}
+
+
+static void _check_obj_time_chain(const struct RbCheckPara *para, void *arg)
+{
+	struct TimeItem timeObj = {0};
+	struct timespec time = {0};
+	struct AMCEpollEvent *event = NULL;
+	size_t *count = (size_t *)arg;
+
+	memcpy(&timeObj, para->data, sizeof(timeObj));
+	time = _timespec_from_rbkey(timeObj.time);
+	event = _objptr_from_rbkey(para->key);
+
+	_TM_DB("\t[%02ld] %04ld.%09ld: %s %d", (long)(*count), (long)time.tv_sec, (long)time.tv_nsec, event->description, event->fd);
+
+	*count += 1;
+	return;
+}
+
+
+void utilTimeout_Debug(struct UtilTimeoutChain *chain)
+{
+	size_t count = 0;
+
+	count = 0;
+	_TM_DB("time_obj_chain has %ld memers", (long)utilRbTree_GetNodeCount(&(chain->time_obj_chain)));
+	utilRbTree_CheckData(&(chain->time_obj_chain), RbCheck_IncAll, 0, _check_time_obj_chain, &count);
+	utilRbTree_Dump(&(chain->time_obj_chain), 2);
+
+	count = 0;
+	_TM_DB("obj_time_chain has %ld memers", (long)utilRbTree_GetNodeCount(&(chain->obj_time_chain)));
+	utilRbTree_CheckData(&(chain->obj_time_chain), RbCheck_IncAll, 0, _check_obj_time_chain, &count);
+	utilRbTree_Dump(&(chain->obj_time_chain), 2);
+
+	return;
+}
+
+
+#if 0
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <string.h>
 
-/* --------------------utilTimeout_Debug----------------------- */
 #define DO_AND_TEST(x)	do{	\
 	int callStat = (x);	\
 	if (callStat < 0) {	\
@@ -721,6 +799,9 @@ static int _rand_int(int minInt, int maxInt)
 	return result;
 }
 
+
+
+
 void utilTimeout_Debug()
 {
 	struct UtilRbTree tree = {0};
@@ -770,6 +851,8 @@ void utilTimeout_Debug()
 
 	return;
 }
+#endif
+
 
 #endif
 

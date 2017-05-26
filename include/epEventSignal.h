@@ -30,6 +30,8 @@
 #include "epCommon.h"
 #include <errno.h>
 
+#define EVENT_SIGNAL_DESCRIPTION	"signal event"
+
 struct AMCEpollEvent *
 	epEventSignal_Create(int sig, events_t events, long timeout, ev_callback callback, void *userData);
 BOOL 

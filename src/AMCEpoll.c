@@ -101,7 +101,8 @@ static long _loop_get_timeout_msec(struct AMCEpoll *base)
 		ret = 1;
 	}
 	else {
-		DEBUG("Next timeout event in %ld msec(s)", ret);
+		DEBUG("Next timeout event in %ld msec(s), now %04ld.%09ld\n\n\n", ret, utilTimeout_GetSysupTime().tv_sec, utilTimeout_GetSysupTime().tv_nsec);
+		ret += 1;
 	}
 	return ret;
 }
@@ -132,16 +133,23 @@ static void _loop_handle_timeout(struct AMCEpoll *base)
 	int compare = 0;
 	BOOL isDone = FALSE;
 
+	utilTimeout_Debug(&(base->all_timeouts));
+
 	do {
 		callStat = utilTimeout_GetSmallestTime(&(base->all_timeouts), &minTime, &event);
 		if (callStat < 0) {
-			DEBUG("Enjoy your peace...");
+			DEBUG("<%04ld.%09ld> Enjoy your peace...", (long)(sysTime.tv_sec), (long)(sysTime.tv_nsec));
 			isDone = TRUE;
 		}
 		else {
 			compare = utilTimeout_CompareTime(&minTime, &sysTime);
 			if (compare <= 0)
 			{
+				DEBUG("<%04ld.%09ld> %s %d timeout at %04ld.%09ld", 
+						(long)(sysTime.tv_sec), (long)(sysTime.tv_nsec),
+						event->description, event->fd, 
+						(long)(minTime.tv_sec), (long)(minTime.tv_nsec));
+			
 				/* invoke callback */
 				epEvent_DetachTimeout(base, event);
 				epEvent_InvokeCallback(base, event, 0, TRUE);
@@ -161,6 +169,7 @@ static void _loop_handle_timeout(struct AMCEpoll *base)
 						epEvent_AttachTimeout(base, event);
 					}
 				}
+
 			}
 			else {
 				isDone = TRUE;

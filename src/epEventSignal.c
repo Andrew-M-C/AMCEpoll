@@ -40,18 +40,6 @@
 #include <pthread.h>
 #include <sys/epoll.h>
 
-#define _RETURN_ERR(err)	\
-	do{\
-		if (err > 0) {\
-			errno = err;\
-			return (0 - err);\
-		} else if (err < 0) {\
-			errno = 0 - err;\
-			return err;\
-		} else {\
-			return -1;\
-		}\
-	}while(0)
 
 #define _SIG_EVENT_LOCK()		do{pthread_mutex_lock(&_signal_lock);}while(0)
 #define _SIG_EVENT_UNLOCK()		do{pthread_mutex_unlock(&_signal_lock);}while(0)
@@ -108,7 +96,7 @@ static int _epoll_signal_add(struct AMCEpoll *base, struct AMCEpollEvent *amcEve
 	} else {
 		int err = errno;
 		ERROR("Failed in epoll_add(): %s", strerror(err));
-		_RETURN_ERR(err);
+		return ep_err(err);
 	}
 }
 
@@ -129,7 +117,7 @@ static int _epoll_signal_mod(struct AMCEpoll *base, struct AMCEpollEvent *amcEve
 	} else {
 		int err = errno;
 		ERROR("Failed in epoll_mod(): %s", strerror(err));
-		_RETURN_ERR(err);
+		return ep_err(err);
 	}
 }
 
@@ -147,7 +135,7 @@ static int _epoll_signal_del(struct AMCEpoll *base, struct AMCEpollEvent *amcEve
 		} else {
 			int err = errno;
 			ERROR("Failed in epoll_del(): %s", strerror(err));
-			_RETURN_ERR(err);
+			return ep_err(err);
 		}
 	}
 	else {
@@ -270,7 +258,7 @@ FAILED:
 			sigPipe->fd[PIPE_WRITE] = -1;
 		}
 
-		_RETURN_ERR(err);
+		return ep_err(err);
 	}
 }
 
@@ -346,7 +334,7 @@ static int _signal_re_add_LOCKED(struct AMCEpollEvent *event)
 FAILED:
 	{
 		int err = errno;
-		_RETURN_ERR(err);
+		return ep_err(err);
 	}
 }
 
@@ -440,7 +428,11 @@ static int _add_signal_event_LOCKED(struct AMCEpoll *base, struct AMCEpollEvent 
 		goto FAILED;
 	}
 
-	return 0;
+	if (BITS_ALL_SET(event->events, EP_EVENT_TIMEOUT)) {
+		callStat = epEventIntnl_AttachToTimeoutChain(base, event);
+	}
+
+	return callStat;
 FAILED:
 	return callStat;
 }
@@ -463,6 +455,12 @@ static int _mod_signal_event_LOCKED(struct AMCEpoll *base, struct AMCEpollEvent 
 		_signal_del_LOCKED(event);
 		ERROR("Failed to mod signal: %s", strerror(errno));
 		goto FAILED;
+	}
+
+	epEventIntnl_DetachFromTimeoutChain(base, event);
+
+	if (BITS_ALL_SET(event->events, EP_EVENT_TIMEOUT)) {
+		callStat = epEventIntnl_AttachToTimeoutChain(base, event);
 	}
 
 	return 0;
@@ -527,6 +525,7 @@ struct AMCEpollEvent *epEventSignal_Create(int sig, events_t events, long timeou
 	sigPipe = (struct EpSigPipe *)(newEvent->inter_data);
 	sigPipe->fd[PIPE_READ]  = -1;
 	sigPipe->fd[PIPE_WRITE] = -1;
+	newEvent->description = EVENT_SIGNAL_DESCRIPTION;
 	newEvent->fd = sig;
 	newEvent->callback = callback;
 	newEvent->user_data = userData;
@@ -549,7 +548,7 @@ static int epEventSignal_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *
 {
 	if ((NULL == base) || (NULL == event)) {
 		ERROR("Invalid parameter");
-		_RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	else {
 		struct AMCEpollEvent *oldEvent = epEventIntnl_GetEvent(base, event->key);
@@ -565,7 +564,7 @@ static int epEventSignal_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *
 		/* event duplicated */
 		else {
 			ERROR("Event for signal %d already existed", event->fd);
-			_RETURN_ERR(EEXIST);
+			return ep_err(EEXIST);
 		}
 	}
 }
@@ -585,7 +584,7 @@ static int epEventSignal_GenKey(struct AMCEpollEvent *event, char *keyOut, size_
 		/* OK */
 	} else {
 		ERROR("Invalid parameter");
-		_RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 
 	_snprintf_signal_key(event, keyOut, nBuffLen);
@@ -598,7 +597,7 @@ static int epEventSignal_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEv
 {
 	if ((NULL == base) || (NULL == event)) {
 		ERROR("Invalid parameter");
-		_RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	else {
 		int callStat = 0;
@@ -607,7 +606,7 @@ static int epEventSignal_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEv
 		eventInBase = epEventIntnl_GetEvent(base, event->key);
 		if (eventInBase != event) {
 			ERROR("Event %p is not member of Base %p", event, base);
-			_RETURN_ERR(ENOENT);
+			return ep_err(ENOENT);
 		}
 
 		callStat = _del_signal_event_LOCKED(base, event);
@@ -626,7 +625,7 @@ static int epEventSignal_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEv
 static int epEventSignal_Destroy(struct AMCEpollEvent *event)
 {
 	if (NULL == event) {
-		_RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else {
 		epEventIntnl_InvokeUserFreeCallback(event, event->fd);
 		return epEventIntnl_FreeEmptyEvent(event);
@@ -638,21 +637,28 @@ static int epEventSignal_Destroy(struct AMCEpollEvent *event)
 static int epEventSignal_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent, BOOL timeout)
 {
 	events_t userWhat = 0;
-	if (base && event && epollEvent)
+	if (base && event)
 	{
-		int sigNum = 0;
-		ssize_t callStat = 0;
-		struct EpSigPipe *sigPipe = (struct EpSigPipe *)(event->inter_data);
+		if (timeout) {
+			if (BITS_HAVE_INTRSET(event->events, EP_EVENT_TIMEOUT)) {
+				epEventIntnl_InvokeUserCallback(event, event->fd, EP_EVENT_TIMEOUT);
+			}
+		}
+		else if (epollEvent) {
+			int sigNum = 0;
+			ssize_t callStat = 0;
+			struct EpSigPipe *sigPipe = (struct EpSigPipe *)(event->inter_data);
 
-		do {
-			callStat = AMCFd_Read(sigPipe->fd[PIPE_READ], &sigNum, sizeof(sigNum));
-		} while(callStat > 0);
+			do {
+				callStat = AMCFd_Read(sigPipe->fd[PIPE_READ], &sigNum, sizeof(sigNum));
+			} while(callStat > 0);
 
-		DEBUG("Get signal: %s (%d)", strsignal(sigNum), sigNum);
-		
-		userWhat = _amc_code_from_signal_epoll_code(epollEvent);
-		if (BITS_HAVE_INTRSET(userWhat, event->events)) {
-			epEventIntnl_InvokeUserCallback(event, event->fd, userWhat);
+			DEBUG("Get signal: %s (%d)", strsignal(sigNum), sigNum);
+			
+			userWhat = _amc_code_from_signal_epoll_code(epollEvent);
+			if (BITS_HAVE_INTRSET(userWhat, event->events)) {
+				epEventIntnl_InvokeUserCallback(event, event->fd, userWhat);
+			}
 		}
 		return 0;
 	}
