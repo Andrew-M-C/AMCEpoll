@@ -155,18 +155,26 @@ static void _loop_handle_timeout(struct AMCEpoll *base)
 				epEvent_InvokeCallback(base, event, 0, TRUE);
 
 				/* add again */
-				if (FALSE == BITS_ALL_SET(event->events, EP_MODE_PERSIST))
-				{
+				if (BITS_ALL_SET(event->status, EpEvStat_FreeLater)) {
+					epEvent_Free(event);
+					event = NULL;
+				}
+				else if (FALSE == BITS_ALL_SET(event->events, EP_MODE_PERSIST)) {
 					epEvent_DelFromBase(base, event);
 				}
-				else
-				{
-					if (utilTimeout_ObjectExists(&(base->all_timeouts), event)) {
+				else {
+					if (utilTimeout_ObjectExists(&(base->all_timeouts), event))
+					{
 						/* timeout already added by user. Nothing more needs to be done */
 					}
-					else {
-						/* User not added timeout event, let us add it for him/her. */
+					else if ((base == event->owner) &&
+							BITS_ALL_SET(event->events, EP_EVENT_TIMEOUT))
+					{
+						/* User not added timeout event, let us add it for programmer. */
 						epEvent_AttachTimeout(base, event);
+					}
+					else {
+						/* event is detatched from base */
 					}
 				}
 
@@ -201,16 +209,28 @@ static void _loop_handle_events(struct AMCEpoll *base, struct epoll_event *evBuf
 			if (BITS_ALL_SET(amcEvent->events, EP_EVENT_TIMEOUT)) {
 				epEvent_DetachTimeout(base, amcEvent);
 			}
-		
 			epEvent_InvokeCallback(base, amcEvent, epollWhat, FALSE);
-			if (FALSE == BITS_ANY_SET(amcEvent->events, EP_MODE_PERSIST)) {
+
+			if (BITS_ALL_SET(amcEvent->status, EpEvStat_FreeLater)) {
+				epEvent_Free(amcEvent);
+				amcEvent = NULL;
+			}
+			else if (FALSE == BITS_ALL_SET(amcEvent->events, EP_MODE_PERSIST)) {
 				epEvent_DelFromBase(base, amcEvent);
 			}
 			else {
-				if (BITS_ALL_SET(amcEvent->events, EP_EVENT_TIMEOUT)) {
-					if (FALSE == utilTimeout_ObjectExists(&(base->all_timeouts), amcEvent)) {
-						epEvent_AttachTimeout(base, amcEvent);
-					}
+				if (utilTimeout_ObjectExists(&(base->all_timeouts), amcEvent))
+				{
+					/* timeout already added by user. Nothing more needs to be done */
+				}
+				else if ((base == amcEvent->owner) &&
+						BITS_ALL_SET(amcEvent->events, EP_EVENT_TIMEOUT))
+				{
+					/* User not added timeout event, let us add it for programmer. */
+					epEvent_AttachTimeout(base, amcEvent);
+				}
+				else {
+					/* event is detatched from base */
 				}
 			}
 		}

@@ -80,7 +80,8 @@ int epEventIntnl_AttachToBase(struct AMCEpoll *base, struct AMCEpollEvent *event
 		return ep_err(EINVAL);
 	} else if ('\0' == event->key[0]) {
 		return ep_err(EBADF);
-	} else {
+	}
+	else {
 		int callStat = cAssocArray_AddValue(base->all_events, event->key, event);
 		if (callStat < 0) {
 			return (0 - errno);
@@ -238,7 +239,13 @@ int epEvent_Free(struct AMCEpollEvent *event)
 		CRIT("Event %p not init correctly", event);
 		return ep_err(EBADF);
 	}
+	else if (BITS_ALL_SET(event->status, EpEvStat_BusyInvoking)) {
+		DEBUG("Event %s busy", event->description);
+		BITS_SET(event->status, EpEvStat_FreeLater);
+		return ep_err(0);
+	}
 	else {
+		DEBUG("Event %s now free", event->description);
 		return (event->free_func)(event);
 	}
 }
@@ -270,8 +277,20 @@ int epEvent_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 		return ep_err(EINVAL);
 	} else if ('\0' == event->attach_func) {
 		return ep_err(EBADF);
-	} else {
-		return (event->attach_func)(base, event);
+	}
+	else {
+		int callStat = 0;
+
+		if (event->owner && (event->owner != base)) {
+			DEBUG("Event %s has previous owner %p, firstly we should detach it", event->description, event->owner);
+			(event->detach_func)(event->owner, event);
+		}
+
+		callStat = (event->attach_func)(base, event);
+		if (0 == callStat) {
+			event->owner = base;
+		}
+		return callStat;
 	}
 }
 
@@ -286,7 +305,13 @@ int epEvent_DelFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 	} else if ('\0' == event->detach_func) {
 		return ep_err(EBADF);
 	} else {
-		return (event->detach_func)(base, event);
+		int callStat = 0;
+		callStat = (event->detach_func)(base, event);
+
+		if (0 == callStat) {
+			event->owner = NULL;
+		}
+		return callStat;
 	}
 }
 
@@ -326,7 +351,13 @@ int epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, i
 		return ep_err(EBADF);
 	}
 	else {
-		return (event->invoke_func)(base, event, epollEvents, timeout);
+		int callStat = 0;
+
+		BITS_SET(event->status, EpEvStat_BusyInvoking);
+		callStat = (event->invoke_func)(base, event, epollEvents, timeout);
+		BITS_CLR(event->status, EpEvStat_BusyInvoking);
+
+		return callStat;
 	}
 }
 

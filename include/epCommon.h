@@ -45,6 +45,7 @@
 #define INTERNAL_DATA_LEN	(64)
 
 /* data structures */
+struct AMCEpoll;
 struct AMCEpollEvent;
 typedef struct epoll_event epoll_event_st;
 typedef int (*free_func)(struct AMCEpollEvent *event);
@@ -53,7 +54,15 @@ typedef int (*attach_func)(struct AMCEpoll *base, struct AMCEpollEvent *event);
 typedef int (*detach_func)(struct AMCEpoll *base, struct AMCEpollEvent *event);
 typedef int (*invoke_func)(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent, BOOL timeout);
 
+typedef enum {
+	EpEvStat_BusyInvoking = (1 << 0),
+	EpEvStat_FreeLater = (1 << 1),
+} EpEventStat_t;
+
+
 struct AMCEpollEvent {
+	struct AMCEpoll *owner;
+	EpEventStat_t  status;
 	char           description[32];
 	int            fd;
 	ev_callback    callback;
