@@ -2,13 +2,13 @@
 	Copyright (C) 2017 by Andrew Chang <laplacezhang@126.com>
 	Licensed under the LGPL v2.1, see the file COPYING in base directory.
 	
-	File name: 	epEventSignal.h
+	File name: 	epCommon.c
 	
 	Description: 	
-	    This file declares signal event interfaces for AMCEpoll.
+	    This file definds simple common function for AMCEpoll project.
 			
 	History:
-		2017-04-27: File created as "epEventSignal.h"
+		2017-05-18: File created as "epCommon.c"
 
 	------------------------------------------------------------------------
 
@@ -24,20 +24,38 @@
 		
 ********************************************************************************/
 
-#ifndef __EP_EVENT_SIGNAL_H__
-#define __EP_EVENT_SIGNAL_H__
+/********/
+#define __HEADERS
+#ifdef __HEADERS
 
 #include "epCommon.h"
 #include <errno.h>
 
-#define EVENT_SIGNAL_DESCRIPTION	"signal event"
+#endif
 
-struct AMCEpollEvent *
-	epEventSignal_Create(int sig, events_t events, long timeout, ev_callback callback, void *userData);
-BOOL 
-	epEventSignal_IsSignalEvent(events_t what);
 
+/********/
+#define __PUBLIC_FUNCTIONS
+#ifdef __PUBLIC_FUNCTIONS
+
+/* --------------------ep_err----------------------- */
+int ep_err(int err)
+{
+	if (0 == err) {
+		errno = 0;
+		return 0;
+	}
+
+	if (err < 0) {
+		err = -err;
+	}
+
+	errno = err;
+	return -err;
+}
 
 #endif
+
+
 /* EOF */
 

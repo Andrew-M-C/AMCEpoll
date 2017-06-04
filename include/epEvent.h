@@ -43,6 +43,10 @@ int
 int 
 	epEventIntnl_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
+	epEventIntnl_AttachToTimeoutChain(struct AMCEpoll *base, struct AMCEpollEvent *event);
+int 
+	epEventIntnl_DetachFromTimeoutChain(struct AMCEpoll *base, struct AMCEpollEvent *event);
+int 
 	epEventIntnl_InvokeUserCallback(struct AMCEpollEvent *event, int handler, events_t what);
 int 
 	epEventIntnl_InvokeUserFreeCallback(struct AMCEpollEvent *event, int handler);
@@ -52,7 +56,7 @@ struct AMCEpollEvent *
 
 /* Public Class Functions */
 struct AMCEpollEvent *
-	epEvent_New(int fd, events_t what, int timeout, ev_callback callback, void *userData);
+	epEvent_New(int fd, events_t what, long timeout, ev_callback callback, void *userData);
 int 
 	epEvent_Free(struct AMCEpollEvent *event);
 const char * 
@@ -64,9 +68,13 @@ int
 int 
 	epEvent_DelFromBaseAndFree(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
-	epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvents);
-//struct AMCEpollEvent *epEvent_GetEvent(struct AMCEpoll *base, const char *key);
-#define epEvent_GetEvent(base, key)		epEventIntnl_GetEvent((base), (key))
+	epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvents, BOOL timeout);
+struct AMCEpollEvent *
+	epEvent_GetEvent(struct AMCEpoll *base, const char *key);
+int 
+	epEvent_DetachTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event);
+int 
+	epEvent_AttachTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event);
 
 #endif
 /* EOF */

@@ -33,6 +33,8 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <errno.h>
+#include <sys/types.h>
+#include <sys/socket.h>
 
 /********/
 /* data types */
@@ -78,7 +80,7 @@ struct AMCEpoll *
 int
 	AMCEpoll_Free(struct AMCEpoll *base);
 struct AMCEpollEvent *
-	AMCEpoll_NewEvent(int fd, events_t events, int timeout, ev_callback callback, void *userData);
+	AMCEpoll_NewEvent(int fd, events_t events, long timeout, ev_callback callback, void *userData);
 int 
 	AMCEpoll_FreeEvent(struct AMCEpollEvent *event);
 int 
@@ -87,6 +89,10 @@ int
 	AMCEpoll_DelEvent(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
 	AMCEpoll_DelAndFreeEvent(struct AMCEpoll *base, struct AMCEpollEvent *event);
+int 
+	AMCEpoll_SetEventTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event, int timeout);	// TODO:
+int 
+	AMCEpoll_GetEventTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event);					// TODO:
 int 
 	AMCEpoll_Dispatch(struct AMCEpoll *base);
 int 
@@ -99,6 +105,12 @@ ssize_t
 	AMCFd_Read(int fd, void *buff, size_t nbyte);
 ssize_t 
 	AMCFd_Write(int fd, const void *buff, size_t nbyte);
+ssize_t 
+	AMCFd_SendTo(int fd, const void *buff, size_t nbyte, int flags, const struct sockaddr *to, socklen_t tolen);
+ssize_t 
+	AMCFd_RecvFrom(int fd, void *buff, size_t nbyte, int flags, struct sockaddr *from, socklen_t *fromlen);
+int 
+	AMCFd_SockaddrToStr(const struct sockaddr *addr, char *buff, size_t buffSize);
 
 
 #endif

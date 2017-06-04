@@ -32,6 +32,7 @@
 #include "utilLog.h"
 #include "AMCEpoll.h"
 #include "cAssocArray.h"
+#include "utilTimeout.h"
 
 #include <sys/epoll.h>
 #include <errno.h>
@@ -42,6 +43,10 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <signal.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
 #endif
 
@@ -82,6 +87,159 @@ enum {
 #define __AMC_EPOLL_MAIN_LOOP
 #ifdef __AMC_EPOLL_MAIN_LOOP
 
+/* --------------------_loop_get_timeout_msec----------------------- */
+static long _loop_get_timeout_msec(struct AMCEpoll *base)
+{
+	long ret = 0;
+	ret = utilTimeout_MinimumSleepMilisecs(&(base->all_timeouts));
+	if (ret < 0) {
+		DEBUG("No timeout events");
+		ret = 1000;
+	}
+	else if (0 == ret) {
+		DEBUG("Next timeout event in 1 msec");
+		ret = 1;
+	}
+	else {
+		DEBUG("Next timeout event in %ld msec(s), now %04ld.%09ld\n\n\n", ret, utilTimeout_GetSysupTime().tv_sec, utilTimeout_GetSysupTime().tv_nsec);
+		ret += 1;
+	}
+	return ret;
+}
+
+
+/* --------------------_loop_handle_error----------------------- */
+static void _loop_handle_error(struct AMCEpoll *base, int error)
+{
+	if (EINTR == error) {
+		/* nothing needs to be done */
+	}
+	else {
+		ERROR("Failed in epoll_wait(): %s", strerror(error));
+		BITS_SET(base->base_status, EP_STAT_EPOLL_ERROR);
+	}
+	
+	return;
+}
+
+
+/* --------------------_dispatch_main_loop----------------------- */
+static void _loop_handle_timeout(struct AMCEpoll *base)
+{
+	struct timespec sysTime = utilTimeout_GetSysupTime();
+	struct timespec minTime = {0};
+	struct AMCEpollEvent *event = NULL;
+	int callStat = 0;
+	int compare = 0;
+	BOOL isDone = FALSE;
+
+	//utilTimeout_Debug(&(base->all_timeouts));
+
+	do {
+		callStat = utilTimeout_GetSmallestTime(&(base->all_timeouts), &minTime, &event);
+		if (callStat < 0) {
+			DEBUG("<%04ld.%09ld> Enjoy your peace...", (long)(sysTime.tv_sec), (long)(sysTime.tv_nsec));
+			isDone = TRUE;
+		}
+		else {
+			compare = utilTimeout_CompareTime(&minTime, &sysTime);
+			if (compare <= 0)
+			{
+				DEBUG("<%04ld.%09ld> %s timeout at %04ld.%09ld", 
+						(long)(sysTime.tv_sec), (long)(sysTime.tv_nsec),
+						event->description, 
+						(long)(minTime.tv_sec), (long)(minTime.tv_nsec));
+			
+				/* invoke callback */
+				epEvent_DetachTimeout(base, event);
+				epEvent_InvokeCallback(base, event, 0, TRUE);
+
+				/* add again */
+				if (BITS_ALL_SET(event->status, EpEvStat_FreeLater)) {
+					epEvent_Free(event);
+					event = NULL;
+				}
+				else if (FALSE == BITS_ALL_SET(event->events, EP_MODE_PERSIST)) {
+					epEvent_DelFromBase(base, event);
+				}
+				else {
+					if (utilTimeout_ObjectExists(&(base->all_timeouts), event))
+					{
+						/* timeout already added by user. Nothing more needs to be done */
+					}
+					else if ((base == event->owner) &&
+							BITS_ALL_SET(event->events, EP_EVENT_TIMEOUT))
+					{
+						/* User not added timeout event, let us add it for programmer. */
+						epEvent_AttachTimeout(base, event);
+					}
+					else {
+						/* event is detatched from base */
+					}
+				}
+
+			}
+			else {
+				isDone = TRUE;
+			}
+		}
+	}
+	while (FALSE == isDone);
+
+	return;
+}
+
+
+/* --------------------_dispatch_main_loop----------------------- */
+static void _loop_handle_events(struct AMCEpoll *base, struct epoll_event *evBuff, size_t nTotal)
+{
+	int epollWhat = 0;
+	size_t nIndex = 0;
+	struct AMCEpollEvent *amcEvent = NULL;
+
+	DEBUG("%d event(s) active", nTotal);
+
+	for (nIndex = 0; nIndex < nTotal; nIndex ++)
+	{
+		epollWhat = evBuff[nIndex].events;
+		amcEvent = (struct AMCEpollEvent *)(evBuff[nIndex].data.ptr);
+
+		if (amcEvent)
+		{
+			if (BITS_ALL_SET(amcEvent->events, EP_EVENT_TIMEOUT)) {
+				epEvent_DetachTimeout(base, amcEvent);
+			}
+			epEvent_InvokeCallback(base, amcEvent, epollWhat, FALSE);
+
+			if (BITS_ALL_SET(amcEvent->status, EpEvStat_FreeLater)) {
+				epEvent_Free(amcEvent);
+				amcEvent = NULL;
+			}
+			else if (FALSE == BITS_ALL_SET(amcEvent->events, EP_MODE_PERSIST)) {
+				epEvent_DelFromBase(base, amcEvent);
+			}
+			else {
+				if (utilTimeout_ObjectExists(&(base->all_timeouts), amcEvent))
+				{
+					/* timeout already added by user. Nothing more needs to be done */
+				}
+				else if ((base == amcEvent->owner) &&
+						BITS_ALL_SET(amcEvent->events, EP_EVENT_TIMEOUT))
+				{
+					/* User not added timeout event, let us add it for programmer. */
+					epEvent_AttachTimeout(base, amcEvent);
+				}
+				else {
+					/* event is detatched from base */
+				}
+			}
+		}
+		// end of "if (amcEvent)"
+	}
+	// end of "for (nIndex = 0; nIndex < nTotal; nIndex ++)"
+}
+
+
 /* --------------------_dispatch_main_loop----------------------- */
 static int _dispatch_main_loop(struct AMCEpoll *base)
 {
@@ -89,68 +247,53 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 	int evFd = base->epoll_fd;
 	int evSize = base->epoll_buff_size;
 	int nTotal = 0;
-	int nIndex = 0;
 	int errCpy = 0;
+	long waitMilisec = 0;
 	BOOL shouldExit = FALSE;
 
 	base->base_status = 0;
-	base->base_status |= EP_STAT_RUNNING;
+	BITS_SET(base->base_status, EP_STAT_RUNNING);
 
 	/* This is actually a thread-like process */
-	do {
-		nTotal = epoll_wait(evFd, evBuff, evSize, 1000);		// TODO: implement timeout
-		errCpy = errno;
+	while (FALSE == shouldExit)
+	{
+		/******/
+		/* invoke epoll */
+		waitMilisec = _loop_get_timeout_msec(base);
+		nTotal = epoll_wait(evFd, evBuff, evSize, waitMilisec);
+
+		/******/
+		/* handle epoll */
 		if (nTotal < 0) {
-			if (EINTR == errCpy) {
-				// TODO: Support signal events
-			}
-			else {
-				ERROR("Failed in epoll_wait(): %s", strerror(errCpy));
-				base->base_status |= EP_STAT_EPOLL_ERROR;
-				shouldExit = TRUE;
-			}
-		}
-		else if (0 == nTotal) {
-			// TODO: Add support
-			DEBUG("Enjoy your peace...");
-		}
-		else {
-			DEBUG("%d event(s) active", nTotal);
-			int epollWhat = 0;
-			struct AMCEpollEvent *amcEvent = NULL;
-			for (nIndex = 0; nIndex < nTotal; nIndex ++)
-			{
-				epollWhat = evBuff[nIndex].events;
-				amcEvent = (struct AMCEpollEvent *)(evBuff[nIndex].data.ptr);
-
-				if (amcEvent) {
-					epEvent_InvokeCallback(base, amcEvent, epollWhat);
-
-					if (FALSE == BITS_ANY_SET(amcEvent->events, EP_MODE_PERSIST)) {
-						epEvent_DelFromBase(base, amcEvent);
-					}
-				}
-			}
-			// end of "for (nIndex = 0; nIndex < nTotal; nIndex ++)"
+			_loop_handle_error(base, errno);
+		} else if (0 == nTotal) {
+			_loop_handle_timeout(base);
+		} else {
+			_loop_handle_events(base, evBuff, nTotal);
+			_loop_handle_timeout(base);
 		}
 		// end of "else (nTotal < 0) {..."
 
+		/******/
 		/* main loop status check */
-		if (BITS_ANY_SET(base->base_status, EP_STAT_SHOULD_EXIT)) {
+		if (BITS_ANY_SET(base->base_status, EP_STAT_SHOULD_EXIT | EP_STAT_EPOLL_ERROR))
+		{
 			shouldExit = TRUE;
 		}
-	} while (FALSE == shouldExit);
-	// end of "do - while (FALSE == shouldExit)"
+	}
+	// end of "while (FALSE == shouldExit)"
 
 	/* clean status */
-	base->base_status &= ~(EP_STAT_SHOULD_EXIT | EP_STAT_RUNNING);
+	BITS_CLR(base->base_status, EP_STAT_SHOULD_EXIT | EP_STAT_RUNNING);
 
 	/* return */
-	if (base->base_status & EP_STAT_EPOLL_ERROR) {
-		RETURN_ERR(errCpy);
+	if (BITS_ANY_SET(base->base_status, EP_STAT_EPOLL_ERROR))
+	{
+		BITS_CLR(base->base_status, EP_STAT_EPOLL_ERROR);
+		return ep_err(errCpy);
 	}
 	else {
-		return 0;
+		return ep_err(0);
 	}
 }
 
@@ -200,6 +343,14 @@ struct AMCEpoll *AMCEpoll_New(size_t buffSize)
 			}
 		}
 
+		/* timeout chain */
+		if (isOK) {
+			int callStat = utilTimeout_Init(&(ret->all_timeouts));
+			if (callStat < 0) {
+				isOK = FALSE;
+			}
+		}
+
 		/* return */
 		if (FALSE == isOK) {
 			if (ret) {
@@ -217,7 +368,7 @@ int AMCEpoll_Free(struct AMCEpoll *base)
 {
 	if (NULL == base) {
 		ERROR("Nil parameter");
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	else
 	{
@@ -252,6 +403,8 @@ int AMCEpoll_Free(struct AMCEpoll *base)
 			cAssocArray_Delete(base->all_events, TRUE);
 			base->all_events = NULL;
 
+			utilTimeout_Clean(&(base->all_timeouts));
+
 			if (allKeys) {
 				cArrayKeys_Free(allKeys);
 				allKeys = NULL;
@@ -272,7 +425,7 @@ int AMCEpoll_Free(struct AMCEpoll *base)
 
 
 /* --------------------AMCEpoll_NewEvent----------------------- */
-struct AMCEpollEvent *AMCEpoll_NewEvent(int fd, events_t events, int timeout, ev_callback callback, void *userData)
+struct AMCEpollEvent *AMCEpoll_NewEvent(int fd, events_t events, long timeout, ev_callback callback, void *userData)
 {
 	return epEvent_New(fd, events, timeout, callback, userData);
 }
@@ -318,7 +471,7 @@ int AMCEpoll_Dispatch(struct AMCEpoll *base)
 {
 	if (NULL == base) {
 		ERROR("Nil parameter");
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} 
 	else if (0 == cAssocArray_Size(base->all_events)) {
 		return 0;
@@ -334,7 +487,7 @@ int AMCEpoll_LoopExit(struct AMCEpoll *base)
 {
 	if (NULL == base) {
 		ERROR("Nil parameter");
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	} else {
 		base->base_status |= EP_STAT_SHOULD_EXIT;
 		return 0;
@@ -347,7 +500,7 @@ int AMCFd_MakeNonBlock(int fd)
 {
 	if (fd < 0) {
 		ERROR("Invalid file descriptor");
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	else {
 		int flags = fcntl(fd, F_GETFL, NULL);
@@ -358,7 +511,7 @@ int AMCFd_MakeNonBlock(int fd)
 		else {
 			int err = errno;
 			ERROR("Failed to set O_NONBLOCK for fd %d: %s", fd, strerror(err));
-			RETURN_ERR(err);
+			return ep_err(err);
 		}
 	}
 }
@@ -369,7 +522,7 @@ int AMCFd_MakeCloseOnExec(int fd)
 {
 	if (fd < 0) {
 		ERROR("Invalid file descriptor");
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	else {
 		int flags = fcntl(fd, F_GETFD, NULL);
@@ -380,7 +533,7 @@ int AMCFd_MakeCloseOnExec(int fd)
 		else {
 			int err = errno;
 			ERROR("Failed to set FD_CLOEXEC for fd %d: %s", fd, strerror(err));
-			RETURN_ERR(err);
+			return ep_err(err);
 		}
 	}
 }
@@ -396,10 +549,10 @@ ssize_t AMCFd_Read(int fd, void *rawBuf, size_t nbyte)
 	BOOL isDone = FALSE;
 
 	if (fd < 0) {
-		RETURN_ERR(EBADF);
+		return ep_err(EBADF);
 	}
 	if (NULL == buff) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	if (0 == nbyte) {
 		return 0;
@@ -454,10 +607,10 @@ ssize_t AMCFd_Write(int fd, const void *buff, size_t nbyte)
 	BOOL isDone = FALSE;
 
 	if (fd < 0) {
-		RETURN_ERR(EBADF);
+		return ep_err(EBADF);
 	}
 	if (NULL == buff) {
-		RETURN_ERR(EINVAL);
+		return ep_err(EINVAL);
 	}
 	if (0 == nbyte) {
 		return 0;
@@ -487,6 +640,151 @@ ssize_t AMCFd_Write(int fd, const void *buff, size_t nbyte)
 	while (FALSE == isDone);
 
 	return ret; 
+}
+
+
+/* --------------------AMCFd_SendTo----------------------- */
+ssize_t AMCFd_SendTo(int fd, const void *buff, size_t nbyte, int flags, const struct sockaddr *to, socklen_t tolen)
+{
+	int err = 0;
+	ssize_t ret = 0;
+	ssize_t callStat = 0;
+	BOOL isDone = FALSE;
+
+	if (fd < 0) {
+		return ep_err(EBADF);
+	}
+	if (NULL == buff) {
+		return ep_err(EINVAL);
+	}
+	if (0 == nbyte) {
+		return 0;
+	}
+
+	do {
+		callStat = sendto(fd, buff + ret, nbyte - ret, flags, to, tolen);
+		if (callStat < 0) {
+			err = errno;
+			if (EINTR == errno) {
+				/* continue */
+			} else if (EAGAIN == errno) {
+				isDone = TRUE;
+			} else {
+				DEBUG("Fd %d error in sendto(): %s", strerror(err));
+				ret = (ret > 0) ? ret : -1;
+				isDone = TRUE;
+			}
+		}
+		else {
+			ret += callStat;
+			if (ret >= nbyte) {
+				isDone = TRUE;
+			}
+		}
+	}
+	while (FALSE == isDone);
+
+	return ret;
+}
+
+
+/* --------------------AMCFd_RecvFrom----------------------- */
+ssize_t AMCFd_RecvFrom(int fd, void *rawBuf, size_t nbyte, int flags, struct sockaddr *from, socklen_t *fromlen)
+{
+	int err = 0;
+	ssize_t callStat = 0;
+	ssize_t ret = 0;
+	uint8_t *buff = (uint8_t *)rawBuf;
+	BOOL isDone = FALSE;
+
+	if (fd < 0) {
+		return ep_err(EBADF);
+	}
+	if (NULL == buff) {
+		return ep_err(EINVAL);
+	}
+	if (0 == nbyte) {
+		return 0;
+	}
+
+	/* loop read */
+	do {
+		callStat = recvfrom(fd, buff + ret, nbyte - ret, flags, from, fromlen);
+		err = errno;
+
+		if (0 == callStat) {
+			/* EOF */
+			DEBUG("Fd %d EOF", fd);
+			//ret = 0;
+			isDone = TRUE;
+		}
+		else if (callStat < 0)
+		{
+			if (EINTR == err) {
+				/* continue */
+			} else if (EAGAIN == err) {
+				DEBUG("Fd %d EAGAIN", fd);
+				isDone = TRUE;
+			} else {
+				DEBUG("Fd %d error in recvfrom(): %s", strerror(err));
+				ret = -1;
+				isDone = TRUE;
+			}
+		}
+		else
+		{
+			ret += callStat;
+
+			if (ret >= nbyte) {
+				isDone = TRUE;
+			}
+		}
+	} while (FALSE == isDone);
+	// end of "while (FALSE == isDone)"
+
+	return ret;
+}
+
+
+/* --------------------AMCFd_SockaddrToStr----------------------- */
+int AMCFd_SockaddrToStr(const struct sockaddr *addr, char *buff, size_t buffSize)
+{
+	if (addr && buff && buffSize)
+	{
+		int ret = 0;
+
+		switch (addr->sa_family)
+		{
+		case AF_UNIX:
+		//case AF_LOCAL:
+			{
+				const struct sockaddr_un *addrUn = (const struct sockaddr_un *)addr;
+				buff[buffSize - 1] = '\0';
+				strncpy(buff, addrUn->sun_path, buffSize - 1);
+			}
+			break;
+		case AF_INET:
+			{
+				const struct sockaddr_in *addrIn = (const struct sockaddr_in *)addr;
+				inet_ntop(AF_INET, &(addrIn->sin_addr), buff, (socklen_t)buffSize);
+			}
+			break;
+		case AF_INET6:
+			{
+				const struct sockaddr_in6 *addrIn6 = (const struct sockaddr_in6 *)addr;
+				inet_ntop(AF_INET6, &(addrIn6->sin6_addr), buff, (socklen_t)buffSize);
+			}
+			break;
+		default:
+			ERROR("Unsupported type: %d", (int)(addr->sa_family));
+			break;
+		}
+
+		return ret;
+	}
+	else {
+		return ep_err(EINVAL);
+	}
 }
 
 

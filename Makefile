@@ -22,7 +22,7 @@ all: $(C_ASSOC_ARRAY_DIR) libamcepoll.a libamcepoll.so test
 test: test_server
 
 test_server: test_server.o
-	$(CC) test_server.o -o $@ $(LDFLAGS) -lamcepoll -L./ -static
+	$(CC) test_server.o -o $@ $(LDFLAGS) -lamcepoll -lrt -L./ -static
 	@echo '<< make $@ done >>'
 
 

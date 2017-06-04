@@ -36,6 +36,8 @@
 
 #include "cAssocArray.h"
 #include "AMCEpoll.h"
+#include "utilTimeout.h"
+
 
 /* constants */
 #define EVENT_KEY_LEN_MAX	(32)
@@ -43,21 +45,32 @@
 #define INTERNAL_DATA_LEN	(64)
 
 /* data structures */
+struct AMCEpoll;
 struct AMCEpollEvent;
 typedef struct epoll_event epoll_event_st;
 typedef int (*free_func)(struct AMCEpollEvent *event);
 typedef int (*genkey_func)(struct AMCEpollEvent *event, char *keyBuff, size_t nBuffLen);
 typedef int (*attach_func)(struct AMCEpoll *base, struct AMCEpollEvent *event);
 typedef int (*detach_func)(struct AMCEpoll *base, struct AMCEpollEvent *event);
-typedef int (*invoke_func)(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent);
+typedef int (*invoke_func)(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent, BOOL timeout);
+
+typedef enum {
+	EpEvStat_BusyInvoking = (1 << 0),
+	EpEvStat_FreeLater = (1 << 1),
+} EpEventStat_t;
+
 
 struct AMCEpollEvent {
+	struct AMCEpoll *owner;
+	EpEventStat_t  status;
+	char           description[32];
 	int            fd;
 	ev_callback    callback;
 	void          *user_data;
 	char           key[EVENT_KEY_LEN_MAX];
 	uint8_t        inter_data[INTERNAL_DATA_LEN];		/* internal data, reserved for different types of events */
 	int            epoll_events;
+	long           timeout;
 	events_t       events;
 	free_func      free_func;
 	genkey_func    genkey_func;
@@ -71,27 +84,20 @@ struct AMCEpoll {
 	int             epoll_fd;
 	uint32_t        base_status;
 	cAssocArray    *all_events;
+	struct UtilTimeoutChain     all_timeouts;
 	size_t          epoll_buff_size;
 	epoll_event_st  epoll_buff[0];
 };
 
 /* tools */
 #define BITS_ANY_SET(val, bits)		(0 != ((val) & (bits)))
-#define BITS_ALL_SET(val, bits)		(bits == ((val) & (bits)))
+#define BITS_ALL_SET(val, bits)		((bits) == ((val) & (bits)))
 #define BITS_HAVE_INTRSET(bitA, bitB)	((bitA) != ((bitA) & (~(bitB))))		/* The two bits have intersetion */
+#define BITS_SET(val, bits)			((val) |= (bits))
+#define BITS_CLR(val, bits)			((val) &= ~(bits))
 
-#define RETURN_ERR(err)	\
-	do{\
-		if (err > 0) {\
-			errno = err;\
-			return (0 - err);\
-		} else if (err < 0) {\
-			errno = 0 - err;\
-			return err;\
-		} else {\
-			return -1;\
-		}\
-	}while(0)
+/* function */
+int ep_err(int err);
 
 
 #endif

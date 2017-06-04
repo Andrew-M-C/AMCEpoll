@@ -26,12 +26,14 @@
 ********************************************************************************/
 
 #include "AMCEpoll.h"
+#include "AMCDns.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <signal.h>
+#include <malloc.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -51,6 +53,7 @@ enum {
 	PIPE_WRITE = 1,
 };
 
+#define CFG_SIGNAL_TIMEOUT_MSEC		(5000)
 
 /* ------------------------------------------- */
 static void _callback_signal(struct AMCEpollEvent *theEvent, int signal, events_t events, void *arg)
@@ -66,6 +69,8 @@ static void _callback_signal(struct AMCEpollEvent *theEvent, int signal, events_
 			_LOG("Ignore signal %d", signal);
 			break;
 		case SIGQUIT:
+			_LOG("Now malloc status:");
+			malloc_stats();
 			_LOG("Ignore signal %d", signal);
 			break;
 		case SIGINT:
@@ -75,12 +80,13 @@ static void _callback_signal(struct AMCEpollEvent *theEvent, int signal, events_
 			if (sigIntCount ++  > 5) {
 				_LOG("Abnormal!");
 				exit(1);
-			}			
+			}
 			break;
 		}
 	}
-	else {
-		_LOG("Unsupported event: 0x%x", (int)events);
+	if (events & EP_EVENT_TIMEOUT)
+	{
+		_LOG("Timeout for signal %s", strsignal(signal));
 	}
 
 	return;
@@ -92,8 +98,8 @@ static int _create_signal_handler(struct AMCEpoll *base, int sigNum)
 {
 	int callStat = 0;
 	struct AMCEpollEvent *sigEvent = AMCEpoll_NewEvent(sigNum, 
-												EP_MODE_PERSIST | EP_EVENT_SIGNAL, 
-												-1, _callback_signal, base);
+												EP_MODE_PERSIST | EP_EVENT_SIGNAL | EP_EVENT_TIMEOUT, 
+												CFG_SIGNAL_TIMEOUT_MSEC, _callback_signal, base);
 	if (NULL == sigEvent) {
 		_LOG("Failed to create sigEvent: %s", strerror(errno));
 		return -1;
@@ -359,16 +365,16 @@ static void _callback_accept(struct AMCEpollEvent *theEvent, int fd, events_t ev
 	struct AMCEpoll *base = (struct AMCEpoll *)arg;
 
 	if (events & EP_EVENT_FREE) {
-		_LOG("Close fd %d", fd);
+		_LOG("SRV free, close fd %d", fd);
 		close(fd);
 		fd = -1;
 	}
-	else if (events & EP_EVENT_ERROR) {
+	if (events & EP_EVENT_ERROR) {
 		_LOG("Error on fd %d", fd);
 		AMCEpoll_DelAndFreeEvent(base, theEvent);
 		fd = -1;
 	}
-	else if (events & EP_EVENT_READ) {
+	if (events & EP_EVENT_READ) {
 		BOOL isOK =TRUE;
 		int newFd = -1;
 		int callStat = 0;
@@ -422,8 +428,177 @@ static void _callback_accept(struct AMCEpollEvent *theEvent, int fd, events_t ev
 			}
 		}
 	}
+	if (events & EP_EVENT_TIMEOUT) {
+		_LOG("Timeout on fd %d", fd);
+	}
+
 	return;
 }
+
+#endif
+
+/********/
+#define __DNS_OPERATION
+#ifdef __DNS_OPERATION
+
+static size_t g_preferDNSIndex = 0;
+static const char *g_testDNS = "gmail.com";
+static const char *g_altDNSServer = "8.8.8.8";
+
+
+/* ------------------------------------------- */
+static void _callback_dns(struct AMCEpollEvent *event, int fd, events_t what, void *arg)
+{
+	struct AMCEpoll *base = (struct AMCEpoll *)arg;
+
+	if (what & EP_EVENT_READ)
+	{
+		struct AMCDnsResult *result = NULL;
+
+		result = AMCDns_RecvAndResolve(fd, NULL, TRUE);
+		if (result)
+		{
+			struct AMCDnsResult *next = result;
+			_LOG("Got DNS result:");
+
+			while(next)
+			{
+				if (next->ipv4) {
+					_LOG("<IPv4> \"%s\" -> %s, TTL %d", next->name, next->ipv4, (int)(next->ttl));
+				} else if (next->ipv6) {
+					_LOG("<IPv6> \"%s\" -> %s, TTL %d", next->name, next->ipv6, (int)(next->ttl));
+				} else if (next->cname) {
+					_LOG("<NAME> \"%s\" -> %s, TTL %d", next->name, next->cname, (int)(next->ttl));
+				} else if (next->namesvr) {
+					_LOG("<SERV> \"%s\" -> %s, TTL %d", next->name, next->namesvr, (int)(next->ttl));
+				}
+				next = next->next;
+			}
+
+			AMCDns_FreeResult(result);
+			result = NULL;
+
+			//AMCEpoll_LoopExit(base);
+			AMCEpoll_DelAndFreeEvent(base, event);
+		}
+		else {
+			static int count = 0;
+			struct sockaddr_in address;
+
+			if (++count >= 5) {
+				_LOG("Failed to search for %s", g_testDNS);
+				//AMCEpoll_LoopExit(base);
+				AMCEpoll_DelAndFreeEvent(base, event);
+			}
+			else {
+				_LOG("No result available: %s", strerror(errno));
+				address.sin_family = AF_INET;
+				address.sin_port = 0;
+				inet_pton(AF_INET, g_altDNSServer, &(address.sin_addr));
+				
+				AMCDns_SendRequest(fd, g_testDNS, (struct sockaddr *)&address, sizeof(address));
+			}			
+		}
+	}
+	if (what & EP_EVENT_FREE) {
+		_LOG("DNS free, close fd %d", fd);
+		close(fd);
+	}
+	if (what & EP_EVENT_TIMEOUT) {
+		_LOG("DNS timeout");
+	}
+	
+	return;
+}
+
+
+/* ------------------------------------------- */
+static int _create_dns_handler(struct AMCEpoll *base)
+{
+	int retCode = -1;
+	int callStat = 0;
+	struct sockaddr_in address;
+	socklen_t addrLen = sizeof(address);
+	struct AMCEpollEvent *newEvent = NULL;
+
+	int fd = socket(AF_INET, SOCK_DGRAM, 0);
+	if (fd < 0) {
+		_LOG("Failed to create fd: %s", strerror(errno));
+		goto ERROR;
+	}
+	else {
+		_LOG("Created UDP fd: %d", fd);
+	}
+
+	callStat = AMCFd_MakeNonBlock(fd);
+	if (callStat < 0) {
+		goto ERROR;
+	}
+
+	callStat = AMCFd_MakeCloseOnExec(fd);
+	if (callStat < 0) {
+		goto ERROR;
+	}
+
+	address.sin_family = AF_INET;
+	address.sin_port = 0;		/* automatically assign a port */
+	address.sin_addr.s_addr = htonl(INADDR_ANY);
+	callStat = bind(fd, (struct sockaddr *)&address, sizeof(struct sockaddr_in));
+	if (callStat < 0) {
+		_LOG("Failed in bind(): %s", strerror(errno));
+		goto ERROR;
+	}
+
+	newEvent = AMCEpoll_NewEvent(fd, EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_EVENT_TIMEOUT, 
+								1000, _callback_dns, base);
+	if (NULL == newEvent) {
+		_LOG("Failed to create event: %s", strerror(errno));
+		goto ERROR;
+	}
+
+	callStat = AMCEpoll_AddEvent(base, newEvent);
+	if (callStat < 0) {
+		_LOG("Failed to add event: %s", strerror(errno));
+		goto ERROR;
+	}
+
+	callStat = getsockname(fd, (struct sockaddr *)&address, (socklen_t *)&addrLen);
+	if (0 == callStat) {
+		_LOG("Created UDP socket, binded at Port: %d", ntohs(address.sin_port));
+	}
+	else {
+		_LOG("Failed in getsockname(): %s", strerror(errno));
+	}
+
+	if (AMCDns_GetDefaultServer((struct sockaddr *)(&address), g_preferDNSIndex) < 0)
+	{
+		_LOG("Failed to get DNS server");
+		address.sin_family = AF_INET;
+		address.sin_port = 0;
+		inet_pton(AF_INET, g_altDNSServer, &(address.sin_addr));
+	}
+	
+	callStat = AMCDns_SendRequest(fd, g_testDNS, (struct sockaddr *)&address, sizeof(address));
+	if (callStat < 0) {
+		_LOG("Failed to send DNS request: %s", strerror(errno));
+		goto ERROR;
+	}
+	
+	return 0;
+ERROR:
+	if (newEvent) {
+		AMCEpoll_DelAndFreeEvent(base, newEvent);
+		newEvent = NULL;
+	}
+	if (fd > 0) {
+		close(fd);
+		fd = -1;
+	}
+	return retCode;
+}
+
+
+
 
 #endif
 
@@ -431,8 +606,10 @@ static void _callback_accept(struct AMCEpollEvent *theEvent, int fd, events_t ev
 #define __SERVER_PREPARATION
 #ifdef __SERVER_PREPARATION
 
+#define CFG_ACCEPT_TIMEOUT_MSEC		(3000)
+
 /* ------------------------------------------- */
-int _create_local_server(struct AMCEpoll *base)
+static int _create_local_server(struct AMCEpoll *base)
 {
 	int retCode = -1;
 	int callStat = 0;
@@ -478,7 +655,7 @@ int _create_local_server(struct AMCEpoll *base)
 
 	acceptEvent = AMCEpoll_NewEvent(fd, 
 					EP_MODE_PERSIST | EP_MODE_EDGE | EP_EVENT_READ | EP_EVENT_ERROR | EP_EVENT_FREE | EP_EVENT_TIMEOUT, 
-					0, _callback_accept, base);
+					CFG_ACCEPT_TIMEOUT_MSEC, _callback_accept, base);
 	if (NULL == acceptEvent) {
 		_LOG("Failed to create event: %s", strerror(errno));
 		goto ERROR;
@@ -488,6 +665,9 @@ int _create_local_server(struct AMCEpoll *base)
 	if (callStat < 0) {
 		_LOG("Failed to add event: %s", strerror(errno));
 		goto ERROR;
+	}
+	else {
+		_LOG("Accept event added");
 	}
 
 	return 0;
@@ -531,6 +711,11 @@ int main(int argc, char* argv[])
 	}
 
 	callStat = _create_signal_handler(base, SIGINT);
+	if (callStat < 0) {
+		goto END;
+	}
+
+	callStat = _create_dns_handler(base);
 	if (callStat < 0) {
 		goto END;
 	}
