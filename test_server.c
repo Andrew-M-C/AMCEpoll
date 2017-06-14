@@ -53,7 +53,7 @@ enum {
 	PIPE_WRITE = 1,
 };
 
-#define CFG_SIGNAL_TIMEOUT_MSEC		(5000)
+#define CFG_SIGNAL_TIMEOUT_MSEC		(-1)
 
 /* ------------------------------------------- */
 static void _callback_signal(struct AMCEpollEvent *theEvent, int signal, events_t events, void *arg)
