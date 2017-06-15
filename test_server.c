@@ -35,6 +35,7 @@
 #include <signal.h>
 #include <malloc.h>
 
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -46,7 +47,7 @@
 
 /********/
 #define __SIGNAL_OPERATIONS
-#ifdef __SIGNAL_OPERATIONS
+#if 1
 
 enum {
 	PIPE_READ = 0,
@@ -124,7 +125,7 @@ static int _create_signal_handler(struct AMCEpoll *base, int sigNum)
 
 /********/
 #define __DEBUG_FUNCTIONS
-#ifdef __DEBUG_FUNCTIONS
+#if 1
 
 /* ------------------------------------------- */
 static void _general_test()
@@ -267,7 +268,7 @@ void _print_data(const void *pData, const size_t size)
 
 /********/
 #define __EVENT_CALLBACKS
-#ifdef __EVENT_CALLBACKS
+#if 1
 
 static const char g_fmtHttpHeader[] = ""
 		"HTTP/1.0 200 OK\r\n"
@@ -439,7 +440,7 @@ static void _callback_accept(struct AMCEpollEvent *theEvent, int fd, events_t ev
 
 /********/
 #define __DNS_OPERATION
-#ifdef __DNS_OPERATION
+#if 1
 
 static size_t g_preferDNSIndex = 0;
 static const char *g_testDNS = "gmail.com";
@@ -604,7 +605,7 @@ ERROR:
 
 /********/
 #define __SERVER_PREPARATION
-#ifdef __SERVER_PREPARATION
+#if 1
 
 #define CFG_ACCEPT_TIMEOUT_MSEC		(3000)
 
@@ -688,8 +689,75 @@ ERROR:
 
 
 /********/
+#define __TIME_TICK
+#if 1
+
+/* ------------------------------------------- */
+static void _callback_tick(struct AMCEpollEvent *event, int fd, events_t what, void *arg)
+{
+	if (what & EP_EVENT_TIMEOUT)
+	{
+		struct timeval now = {0};
+		long msecToWait = 0;
+		long msecNow = 0;
+
+		gettimeofday(&now, NULL);
+		msecNow = (long)(now.tv_usec / 1000);
+		msecToWait = 1000 - msecNow;
+
+		_LOG("TICK at %08ld.%03ld", (long)(now.tv_sec), msecNow);
+		AMCEpoll_SetEventTimeout((struct AMCEpoll *)arg, event, msecToWait);
+	}
+	else if (what & EP_EVENT_FREE) {
+		_LOG("Tick event free");
+	}
+	else {
+		_LOG("Invalid event: 0x%08x", (int)what);
+	}
+
+
+	// TODO:
+	return;
+}
+
+
+/* ------------------------------------------- */
+static int _create_tick_handler(struct AMCEpoll *base)
+{
+	int callStat = -1;
+	struct AMCEpollEvent *newEvent = NULL;
+
+	newEvent = AMCEpoll_NewEvent(-1, EP_EVENT_TIMEOUT | EP_MODE_PERSIST | EP_EVENT_FREE, 
+								990, _callback_tick, base);
+	if (NULL == newEvent) {
+		_LOG("Failed to create tick event");
+		goto ERROR;
+	}
+
+	callStat = AMCEpoll_AddEvent(base, newEvent);
+	if (callStat < 0) {
+		_LOG("Failed to create tick event");
+		goto ERROR;
+	}
+
+	_LOG("Tick event created");
+	return 0;
+
+ERROR:
+	if (newEvent) {
+		AMCEpoll_FreeEvent(newEvent);
+		newEvent = NULL;
+	}
+	return -1;
+}
+
+
+#endif
+
+
+/********/
 #define __MAIN_LOOP
-#ifdef __MAIN_LOOP
+#if 1
 
 /* ------------------------------------------- */
 int main(int argc, char* argv[])
@@ -721,6 +789,11 @@ int main(int argc, char* argv[])
 	}
 
 	callStat = _create_local_server(base);
+	if (callStat < 0) {
+		goto END;
+	}
+
+	callStat = _create_tick_handler(base);
 	if (callStat < 0) {
 		goto END;
 	}

@@ -77,6 +77,9 @@ ssize_t utilLog(int level, const char *format, ...)
 		errno = EINVAL;
 		return -EINVAL;
 	}
+	else if (level > g_log_level) {
+		return 0;
+	}
 	else {
 		char buff[CFG_MAX_LOG_LEN] = "";
 		char usec[8] = "";

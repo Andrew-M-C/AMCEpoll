@@ -55,7 +55,7 @@ static BOOL _check_timeout_events(events_t events)
 	if (0 == events) {
 		return FALSE;
 	}
-	if (0 == (events & (EP_EVENT_READ | EP_EVENT_WRITE | EP_EVENT_SIGNAL))) {
+	if (BITS_ANY_SET(events, (EP_EVENT_READ | EP_EVENT_WRITE | EP_EVENT_SIGNAL))) {
 		return FALSE;
 	}
 	if (FALSE == BITS_ALL_SET(events, EP_EVENT_TIMEOUT)) {
@@ -224,12 +224,8 @@ int epEventTimeout_Destroy(struct AMCEpollEvent *event)
 /* --------------------epEventTimeout_InvokeCallback----------------------- */
 int epEventTimeout_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, int epollEvent, BOOL timeout)
 {
-	events_t userWhat = 0;
-	if (base && event)
-	{
-		if (BITS_HAVE_INTRSET(userWhat, event->events)) {
-			epEventIntnl_InvokeUserCallback(event, event->fd, userWhat);
-		}
+	if (base && event) {
+		epEventIntnl_InvokeUserCallback(event, event->fd, EP_EVENT_TIMEOUT);
 		return 0;
 	}
 	else {

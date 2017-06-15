@@ -30,6 +30,7 @@
 
 #include "epEventFd.h"
 #include "epEventSignal.h"
+#include "epEventTimeout.h"
 
 #include "epCommon.h"
 #include "epEvent.h"
@@ -216,8 +217,12 @@ struct AMCEpollEvent *epEvent_New(int fd, events_t what, long timeout, ev_callba
 	else if (epEventSignal_IsSignalEvent(what)) {
 		ret = epEventSignal_Create(fd, what, timeout, callback, userData);
 	}
+	else if (epEventTimeout_IsTimeoutEvent(what)) {
+		ret = epEventTimeout_Create(fd, what, timeout, callback, userData);
+	}
 	// TODO: support other events
 	else {
+		WARN("Invalid event type: 0x%08x", (int)what);
 		errno = EINVAL;
 		return NULL;
 	}

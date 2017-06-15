@@ -90,9 +90,9 @@ int
 int 
 	AMCEpoll_DelAndFreeEvent(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
-	AMCEpoll_SetEventTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event, int timeout);	// TODO:
-int 
-	AMCEpoll_GetEventTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event);					// TODO:
+	AMCEpoll_SetEventTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event, long timeout);
+long 
+	AMCEpoll_GetEventTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event);
 int 
 	AMCEpoll_Dispatch(struct AMCEpoll *base);
 int 

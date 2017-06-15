@@ -466,6 +466,36 @@ int AMCEpoll_DelAndFreeEvent(struct AMCEpoll *base, struct AMCEpollEvent *event)
 }
 
 
+/* --------------------AMCEpoll_SetEventTimeout----------------------- */
+int AMCEpoll_SetEventTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event, long timeout)
+{
+	if ((NULL == base) || (NULL == event)) {
+		return ep_err(EINVAL); 
+	}
+
+	if (event->timeout == timeout) {
+		return ep_err(0);
+	}
+	else {
+		event->timeout = timeout;
+	}
+
+	return AMCEpoll_AddEvent(base, event);
+}
+
+
+/* --------------------AMCEpoll_SetEventTimeout----------------------- */
+long AMCEpoll_GetEventTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event)
+{
+	if (event) {
+		return event->timeout;
+	}
+	else {
+		return -1;
+	}
+}
+
+
 /* --------------------AMCEpoll_Dispatch----------------------- */
 int AMCEpoll_Dispatch(struct AMCEpoll *base)
 {

@@ -8,7 +8,7 @@ C_ASSOC_ARRAY_DIR = cAssocArray
 C_ASSOC_ARRAY_URL = https://github.com/Andrew-M-C/cAssocArray.git
 PWD = $(shell pwd)
 
-CFLAGS += -I$(PWD)/include -Wall -fPIC -DCFG_LOG_LEVEL=7 -fno-stack-protector
+CFLAGS += -I$(PWD)/include -Wall -fPIC -DCFG_LOG_LEVEL=6 -fno-stack-protector
 LDFLAGS += -pthread -lrt
 
 # main rules
