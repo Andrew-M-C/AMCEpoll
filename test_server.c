@@ -271,13 +271,13 @@ void _print_data(const void *pData, const size_t size)
 #if 1
 
 static const char g_fmtHttpHeader[] = ""
-		"HTTP/1.0 200 OK\r\n"
+		"HTTP/1.1 200 OK\r\n"
 		"Content-Type: text/html\r\n"
-		"Content-Language: en\r\n"
-		"Transfer-Encoding: chunked\r\n"
+		"Content-Language: en-US\r\n"
+		"Transfer-Encoding: ASCII\r\n"
 		"Server: AMCEpoll/1.0.0beta\r\n"
 		"Date: %a, %d %b %Y %H:%M:%S %Z\r\n"
-		"Connection: keep-alive\r\n"
+		"Connection: keep-alive\r\n\r\n"
 	"";
 
 
@@ -288,6 +288,7 @@ static const char g_respData[] = ""
 				"<title>Hello, epoll!</title>"
 			"</head>"
 			"<body>"
+			"No body message"
 			"</body>"
 		"</html>"
 		"\r\n\r\n"
@@ -305,6 +306,8 @@ static ssize_t _write_http_data(int fd)
 
 	strftime(buff, sizeof(buff), g_fmtHttpHeader, &tm);
 	strcat(buff, g_respData);
+	_LOG("Write data:");
+	_print_data(buff, strlen(buff));
 	return write(fd, buff, strlen(buff));
 }
 
@@ -698,6 +701,7 @@ static void _callback_tick(struct AMCEpollEvent *event, int fd, events_t what, v
 	if (what & EP_EVENT_TIMEOUT)
 	{
 		struct timeval now = {0};
+		struct tm timeOfDay = {0};
 		long msecToWait = 0;
 		long msecNow = 0;
 
@@ -705,7 +709,9 @@ static void _callback_tick(struct AMCEpollEvent *event, int fd, events_t what, v
 		msecNow = (long)(now.tv_usec / 1000);
 		msecToWait = 1000 - msecNow;
 
-		_LOG("TICK at %08ld.%03ld", (long)(now.tv_sec), msecNow);
+		localtime_r(&(now.tv_sec), &timeOfDay);
+
+		_LOG("TICK at %02d:%02d:%02d.%03ld", timeOfDay.tm_hour, timeOfDay.tm_min, timeOfDay.tm_sec, msecNow);
 		AMCEpoll_SetEventTimeout((struct AMCEpoll *)arg, event, msecToWait);
 	}
 	else if (what & EP_EVENT_FREE) {
