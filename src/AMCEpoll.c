@@ -527,16 +527,16 @@ int AMCEpoll_LoopExit(struct AMCEpoll *base)
 const char *AMCEpoll_StrError(int error)
 {
 	static const char *errStr[AMC_EP_ERR_BOUNDARY - AMC_EP_ERR_UNKNOWN + 1] = {
-		"unknown error",
-		"event callback not initialized",
-		"event key not initialized",
-		"event class methods not initialized",
-		"base timeout chain not initialized",
-		"event not found",
-		"event already exists",
-		"epoll event codes empty",
+		"Unknown error beyond AMCEpoll",
+		"Event callback not initialized",
+		"Event key not initialized",
+		"Event class methods not initialized",
+		"Base timeout chain not initialized",
+		"Event not found",
+		"Event already exists",
+		"Epoll event codes empty",
 		
-		"illegal AMCEpoll error"	// SHOULD placed in the end
+		"Illegal AMCEpoll error"	// SHOULD placed in the end
 	};
 
 	if (0 == error) {
@@ -552,6 +552,9 @@ const char *AMCEpoll_StrError(int error)
 
 	if (error <= RB_ERR_BOUNDARY) {
 		return utilRbTree_StrError(error);
+	}
+	else if (error < AMC_EP_ERR_UNKNOWN) {
+		return errStr[0];
 	}
 	else if (error >= AMC_EP_ERR_BOUNDARY) {
 		return errStr[0];

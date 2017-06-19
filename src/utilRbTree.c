@@ -1660,17 +1660,17 @@ size_t utilRbTree_Dump(const struct UtilRbTree *tree, int fd)
 const char *utilRbTree_StrError(int error)
 {
 	static const char *errStr[RB_ERR_BOUNDARY - RB_ERR_UNKNOWN + 1] = {
-		"unknown error",
-		"tree already initialized",
-		"tree not initialized",
-		"tree is not empty",
-		"tree is not checking",
-		"recursive check is forbidden",
-		"tree is checking",
-		"another object with given key exists",
-		"object not found",
+		"Unknown error beyond AMC R-B tree",
+		"Tree already initialized",
+		"Tree not initialized",
+		"Tree is not empty",
+		"Tree is not checking",
+		"Recursive check is forbidden",
+		"Tree is checking",
+		"Another object with given key exists",
+		"Object not found",
 		
-		"illegal tree error"	// SHOULD placed in the end
+		"Illegal tree error"	// SHOULD placed in the end
 	};
 
 	if (-1 == error) {

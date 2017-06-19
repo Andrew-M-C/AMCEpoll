@@ -721,8 +721,6 @@ static void _callback_tick(struct AMCEpollEvent *event, int fd, events_t what, v
 		_LOG("Invalid event: 0x%08x", (int)what);
 	}
 
-
-	// TODO:
 	return;
 }
 
@@ -812,6 +810,15 @@ END:
 	if (base) {
 		AMCEpoll_Free(base);
 		base = NULL;
+	}
+	if (1) {
+		/* Test AMCEpoll_StrError() */
+		int err = 0;
+		_LOG("Now let's test AMCEpoll errors:");
+		for (err = 0; err <= AMC_EP_ERR_BOUNDARY; err ++)
+		{
+			_LOG("[Error %03d] %s", err, AMCEpoll_StrError(err));
+		}
 	}
 	_LOG("Goodbye, AMCEpoll!");
 	return 0;
