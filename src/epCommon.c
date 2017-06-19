@@ -50,8 +50,14 @@ int ep_err(int err)
 		err = -err;
 	}
 
-	errno = err;
-	return -err;
+	if (err >= AMC_EP_ERR_UNKNOWN) {
+		errno = EPERM;
+		return -err;
+	}
+	else {
+		errno = err;
+		return -err;
+	}
 }
 
 #endif

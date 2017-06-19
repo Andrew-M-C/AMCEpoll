@@ -149,7 +149,7 @@ int epEventTimeout_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 		/* event duplicated */
 		else {
 			DEBUG("Event %s already existed", event->description);
-			return ep_err(EEXIST);
+			return ep_err(AMC_EP_ERR_OBJ_EXISTS);
 		}
 	}
 	/* ends */
@@ -193,7 +193,7 @@ int epEventTimeout_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *e
 		eventInBase = epEventIntnl_GetEvent(base, event->key);
 		if (eventInBase != event) {
 			ERROR("Event %p is not member of Base %p", event, base);
-			return ep_err(ENOENT);
+			return ep_err(AMC_EP_ERR_OBJ_NOT_FOUND);
 		}
 
 		callStat = epEventIntnl_DetachFromBase(base, event);

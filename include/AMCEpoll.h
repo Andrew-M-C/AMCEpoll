@@ -70,6 +70,22 @@ enum {
 	EP_MODE_EDGE     = (1 << 9),	/* only used when adding events */
 };
 
+/* error codes. */
+enum {
+	AMC_EP_NO_ERR = 0,
+	AMC_RB_ERR_UNKNOWN = 256,	// Red-black tree errors
+	AMC_EP_ERR_UNKNOWN = 512,
+	AMC_EP_ERR_KEY_NOT_INIT,
+	AMC_EP_ERR_CB_NOT_INIT,
+	AMC_EP_ERR_METHOD_NOT_INIT,
+	AMC_EP_ERR_BASE_TIMEOUT_NOT_INIT,
+	AMC_EP_ERR_OBJ_NOT_FOUND,
+	AMC_EP_ERR_OBJ_EXISTS,
+	AMC_EP_ERR_EPOLL_CODE_EMPTY,
+
+	AMC_EP_ERR_BOUNDARY // SHOULD placed in the end
+};
+
 /* callback */
 typedef void (*ev_callback)(struct AMCEpollEvent *event, int fd, events_t events, void *arg);
 
@@ -97,6 +113,8 @@ int
 	AMCEpoll_Dispatch(struct AMCEpoll *base);
 int 
 	AMCEpoll_LoopExit(struct AMCEpoll *base);
+const char *
+	AMCEpoll_StrError(int error);
 int 
 	AMCFd_MakeNonBlock(int fd);
 int 

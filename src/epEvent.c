@@ -80,14 +80,14 @@ int epEventIntnl_AttachToBase(struct AMCEpoll *base, struct AMCEpollEvent *event
 	} else if (NULL == event) {
 		return ep_err(EINVAL);
 	} else if ('\0' == event->key[0]) {
-		return ep_err(EBADF);
+		return ep_err(AMC_EP_ERR_KEY_NOT_INIT);
 	}
 	else {
 		int callStat = cAssocArray_AddValue(base->all_events, event->key, event);
 		if (callStat < 0) {
-			return (0 - errno);
+			return ep_err(errno);
 		} else {
-			return 0;
+			return ep_err(0);
 		}
 	}
 }
@@ -101,7 +101,7 @@ int epEventIntnl_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *eve
 	} else if (NULL == event) {
 		return ep_err(EINVAL);
 	} else if ('\0' == event->key[0]) {
-		return ep_err(EBADF);
+		return ep_err(AMC_EP_ERR_KEY_NOT_INIT);
 	} 
 	else {
 		struct AMCEpollEvent *eventInBase = cAssocArray_GetValue(base->all_events, event->key);
@@ -109,13 +109,13 @@ int epEventIntnl_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *eve
 		if (eventInBase == event) {
 			int callStat = cAssocArray_RemoveValue(base->all_events, event->key, FALSE);
 			if (callStat < 0) {
-				return (0 - errno);
+				return ep_err(errno);
 			} else {
-				return 0;
+				return ep_err(0);
 			}
 		}
 		else {
-			return ep_err(ENOENT);
+			return ep_err(AMC_EP_ERR_OBJ_NOT_FOUND);
 		}
 	}
 }
@@ -168,7 +168,7 @@ int epEventIntnl_InvokeUserCallback(struct AMCEpollEvent *event, int handler, ev
 		return ep_err(EBADF);
 	} else {
 		(event->callback)(event, handler, what, event->user_data);
-		return 0;
+		return ep_err(0);
 	}
 }
 
@@ -180,7 +180,7 @@ int epEventIntnl_InvokeUserFreeCallback(struct AMCEpollEvent *event, int handler
 		if (BITS_HAVE_INTRSET(event->events, EP_EVENT_FREE)) {
 			(event->callback)(event, handler, EP_EVENT_FREE, event->user_data);
 		}
-		return 0;
+		return ep_err(0);
 	}
 	else {
 		return ep_err(EINVAL);
@@ -194,6 +194,7 @@ struct AMCEpollEvent *epEventIntnl_GetEvent(struct AMCEpoll *base, const char *k
 	if (base && key) {
 		return cAssocArray_GetValue(base->all_events, key);
 	} else {
+		ep_err(EINVAL);
 		return NULL;
 	}
 }
@@ -220,7 +221,7 @@ struct AMCEpollEvent *epEvent_New(int fd, events_t what, long timeout, ev_callba
 	else if (epEventTimeout_IsTimeoutEvent(what)) {
 		ret = epEventTimeout_Create(fd, what, timeout, callback, userData);
 	}
-	// TODO: support other events
+	// Note: Add other types of events here.
 	else {
 		WARN("Invalid event type: 0x%08x", (int)what);
 		errno = EINVAL;
@@ -242,10 +243,10 @@ int epEvent_Free(struct AMCEpollEvent *event)
 	}
 	else if (NULL == event->free_func) {
 		CRIT("Event %p not init correctly", event);
-		return ep_err(EBADF);
+		return ep_err(AMC_EP_ERR_CB_NOT_INIT);
 	}
 	else if (BITS_ALL_SET(event->status, EpEvStat_BusyInvoking)) {
-		DEBUG("Event %s busy", event->description);
+		DEBUG("Event %s busy, will free later", event->description);
 		BITS_SET(event->status, EpEvStat_FreeLater);
 		return ep_err(0);
 	}
@@ -281,7 +282,7 @@ int epEvent_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 	} else if (NULL == event) {
 		return ep_err(EINVAL);
 	} else if ('\0' == event->attach_func) {
-		return ep_err(EBADF);
+		return ep_err(AMC_EP_ERR_METHOD_NOT_INIT);
 	}
 	else {
 		int callStat = 0;
@@ -308,7 +309,7 @@ int epEvent_DelFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 	} else if (NULL == event) {
 		return ep_err(EINVAL);
 	} else if ('\0' == event->detach_func) {
-		return ep_err(EBADF);
+		return ep_err(AMC_EP_ERR_METHOD_NOT_INIT);
 	} else {
 		int callStat = 0;
 		callStat = (event->detach_func)(base, event);
@@ -353,7 +354,7 @@ int epEvent_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event, i
 	} else if (NULL == event) {
 		return ep_err(EINVAL);
 	} else if ('\0' == event->invoke_func) {
-		return ep_err(EBADF);
+		return ep_err(AMC_EP_ERR_METHOD_NOT_INIT);
 	}
 	else {
 		int callStat = 0;

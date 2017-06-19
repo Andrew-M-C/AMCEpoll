@@ -333,8 +333,7 @@ static int _signal_re_add_LOCKED(struct AMCEpollEvent *event)
 	return 0;
 FAILED:
 	{
-		int err = errno;
-		return ep_err(err);
+		return ep_err(errno);
 	}
 }
 
@@ -564,7 +563,7 @@ static int epEventSignal_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *
 		/* event duplicated */
 		else {
 			ERROR("Event for signal %d already existed", event->fd);
-			return ep_err(EEXIST);
+			return ep_err(AMC_EP_ERR_OBJ_EXISTS);
 		}
 	}
 }
@@ -606,7 +605,7 @@ static int epEventSignal_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEv
 		eventInBase = epEventIntnl_GetEvent(base, event->key);
 		if (eventInBase != event) {
 			ERROR("Event %p is not member of Base %p", event, base);
-			return ep_err(ENOENT);
+			return ep_err(AMC_EP_ERR_OBJ_NOT_FOUND);
 		}
 
 		callStat = _del_signal_event_LOCKED(base, event);

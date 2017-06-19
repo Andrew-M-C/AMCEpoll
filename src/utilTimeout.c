@@ -139,7 +139,7 @@ static int _add_new_object(struct UtilTimeoutChain *chain, void *obj, struct tim
 		callStat = utilRbTree_SetData(&(chain->time_obj_chain), timeKey, &objValue, NULL);
 		if (callStat < 0) {
 			ERROR("Failed to set obj data: %s", utilRbTree_StrError(callStat));
-			return ep_err(EPERM);
+			return ep_err(callStat);
 		}
 
 		timeValue.time = _rbkey_from_timespec(time);
@@ -147,7 +147,7 @@ static int _add_new_object(struct UtilTimeoutChain *chain, void *obj, struct tim
 		if (callStat < 0) {
 			ERROR("Failed to set time data: %s", utilRbTree_StrError(callStat));
 			utilRbTree_DelData(&(chain->time_obj_chain), timeKey, NULL);
-			return ep_err(EPERM);
+			return ep_err(callStat);
 		}
 
 		return ep_err(0);
@@ -169,7 +169,6 @@ static int _add_new_object(struct UtilTimeoutChain *chain, void *obj, struct tim
 		timeValue.time = _rbkey_from_timespec(time);
 		callStat = utilRbTree_SetData(&(chain->obj_time_chain), timeKey, &timeValue, NULL);
 		if (callStat < 0) {
-			int err = errno;
 			ERROR("Failed to set time data: %s", utilRbTree_StrError(callStat));
 
 			objValue.next = newObjValue->next;
@@ -177,7 +176,7 @@ static int _add_new_object(struct UtilTimeoutChain *chain, void *obj, struct tim
 			free(newObjValue);
 			newObjValue = NULL;
 
-			return ep_err(err);
+			return ep_err(callStat);
 		}
 
 		return ep_err(0);
@@ -267,14 +266,14 @@ static int _del_object(struct UtilTimeoutChain *chain, void *obj)
 	callStat = utilRbTree_DelData(&(chain->obj_time_chain), objKey, &timeValue);
 	if (-RB_ERR_NO_FOUND == callStat) {
 //		WARN("Failed to locate timeout object %p", obj);
-		return ep_err(ENOENT);
+		return ep_err(AMC_EP_ERR_OBJ_NOT_FOUND);
 	}
 
 	timeKey = timeValue.time;
 	callStat = utilRbTree_GetData(&(chain->time_obj_chain), timeKey, &objValue);
 	if (-RB_ERR_NO_FOUND == callStat) {
 //		WARN("Failed to locate timeout object %p in obj chain", obj);
-		return ep_err(ENOENT);
+		return ep_err(AMC_EP_ERR_OBJ_NOT_FOUND);
 	}
 
 	if (objValue.obj == obj)
@@ -418,20 +417,18 @@ int utilTimeout_Init(struct UtilTimeoutChain *chain)
 		return ep_err(EINVAL);
 	}
 	if (chain->init_OK) {
-		return ep_err(EPERM);
+		return ep_err(AMC_EP_ERR_BASE_TIMEOUT_NOT_INIT);
 	}
 
 	callStat = utilRbTree_Init(&(chain->time_obj_chain), sizeof(struct ObjItem));
 	if (callStat < 0) {
 		ERROR("Failed to allocate obj RB-tree: %s", utilRbTree_StrError(callStat));
-		callStat = ep_err(EPERM);
 		goto ENDS;
 	}
 
 	callStat = utilRbTree_Init(&(chain->obj_time_chain), sizeof(struct TimeItem));
 	if (callStat < 0) {
 		ERROR("Failed to allocate time RB-tree: %s", utilRbTree_StrError(callStat));
-		callStat = ep_err(EPERM);
 		goto ENDS;
 	}
 
@@ -454,14 +451,14 @@ int utilTimeout_Clean(struct UtilTimeoutChain *chain)
 		return ep_err(EINVAL);
 	}
 	if (FALSE == chain->init_OK) {
-		return 0;
+		return ep_err(0);
 	}
 
 	utilRbTree_Clean(&(chain->time_obj_chain));
 	utilRbTree_Clean(&(chain->obj_time_chain));
 	chain->init_OK = FALSE;
 
-	return 0;
+	return ep_err(0);
 }
 
 
@@ -472,7 +469,7 @@ int utilTimeout_SetObject(struct UtilTimeoutChain *chain, struct AMCEpollEvent *
 		return ep_err(EINVAL);
 	}
 	if (FALSE == chain->init_OK) {
-		return ep_err(ENOENT);
+		return ep_err(AMC_EP_ERR_BASE_TIMEOUT_NOT_INIT);
 	}
 	else {
 		RbKey_t timeKey = _rbkey_from_timespec(&inTime);
@@ -542,7 +539,7 @@ int utilTimeout_DelObject(struct UtilTimeoutChain *chain, struct AMCEpollEvent *
 		return ep_err(EINVAL);
 	}
 	if (FALSE == chain->init_OK) {
-		return ep_err(ENOENT);
+		return ep_err(AMC_EP_ERR_BASE_TIMEOUT_NOT_INIT);
 	}
 	else {
 		int ret = _del_object(chain, event);
@@ -562,7 +559,7 @@ int utilTimeout_GetSmallestTime(struct UtilTimeoutChain *chain, struct timespec 
 		return ep_err(EINVAL);
 	}
 	if (FALSE == chain->init_OK) {
-		return ep_err(ENOENT);
+		return ep_err(AMC_EP_ERR_BASE_TIMEOUT_NOT_INIT);
 	}
 	else {
 		RbKey_t timeKey;
@@ -572,7 +569,7 @@ int utilTimeout_GetSmallestTime(struct UtilTimeoutChain *chain, struct timespec 
 		callStat = utilRbTree_FindMinimum(&(chain->time_obj_chain), &timeKey, &objValue);
 		if (callStat < 0) {
 			ERROR("Failed to get smallest time: %s", utilRbTree_StrError(callStat));
-			return ep_err(ENOENT);
+			return ep_err(callStat);
 		}
 
 		if (timeOut) {

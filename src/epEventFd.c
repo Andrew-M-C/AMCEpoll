@@ -204,13 +204,12 @@ static int _add_fd_event(struct AMCEpoll *base, struct AMCEpollEvent *event)
 
 RETURN:
 	if (0 == callStat) {
-		return ep_err(0);
+		return 0;
 	}
 	else {
-		int err = errno;
 		epEventIntnl_DetachFromBase(base, event);
 		epEventIntnl_DetachFromTimeoutChain(base, event);
-		return ep_err(err);
+		return callStat;
 	}
 }
 
@@ -301,7 +300,7 @@ int epEventFd_AddToBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 		/* event duplicated */
 		else {
 			ERROR("Event for %d already existed", event->fd);
-			return ep_err(EEXIST);
+			return ep_err(AMC_EP_ERR_OBJ_NOT_FOUND);
 		}
 	}
 	/* ends */
@@ -345,14 +344,13 @@ int epEventFd_DetachFromBase(struct AMCEpoll *base, struct AMCEpollEvent *event)
 		eventInBase = epEventIntnl_GetEvent(base, event->key);
 		if (eventInBase != event) {
 			ERROR("Event %p is not member of Base %p", event, base);
-			return ep_err(ENOENT);
+			return ep_err(AMC_EP_ERR_OBJ_NOT_FOUND);
 		}
 
 		callStat = _del_fd_event(base, event);
 		if (callStat < 0) {
-			int err = errno;
 			ERROR("Failed to del event in epoll_ctl(): %s", strerror(errno));
-			return ep_err(err);
+			return ep_err(callStat);
 		}
 
 		callStat = epEventIntnl_DetachFromBase(base, event);
@@ -391,7 +389,7 @@ int epEventFd_InvokeCallback(struct AMCEpoll *base, struct AMCEpollEvent *event,
 		} else if (epollEvent) {
 			userWhat = _amc_code_from_epoll_code(epollEvent);
 		} else {
-			return ep_err(EINVAL);
+			return ep_err(AMC_EP_ERR_EPOLL_CODE_EMPTY);
 		}
 		
 		if (BITS_HAVE_INTRSET(userWhat, event->events)) {

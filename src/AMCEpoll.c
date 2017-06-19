@@ -247,7 +247,6 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 	int evFd = base->epoll_fd;
 	int evSize = base->epoll_buff_size;
 	int nTotal = 0;
-	int errCpy = 0;
 	long waitMilisec = 0;
 	BOOL shouldExit = FALSE;
 
@@ -290,7 +289,7 @@ static int _dispatch_main_loop(struct AMCEpoll *base)
 	if (BITS_ANY_SET(base->base_status, EP_STAT_EPOLL_ERROR))
 	{
 		BITS_CLR(base->base_status, EP_STAT_EPOLL_ERROR);
-		return ep_err(errCpy);
+		return ep_err(errno);
 	}
 	else {
 		return ep_err(0);
@@ -478,9 +477,8 @@ int AMCEpoll_SetEventTimeout(struct AMCEpoll *base, struct AMCEpollEvent *event,
 	}
 	else {
 		event->timeout = timeout;
+		return AMCEpoll_AddEvent(base, event);
 	}
-
-	return AMCEpoll_AddEvent(base, event);
 }
 
 
@@ -525,6 +523,45 @@ int AMCEpoll_LoopExit(struct AMCEpoll *base)
 }
 
 
+/* --------------------AMCEpoll_StrError----------------------- */
+const char *AMCEpoll_StrError(int error)
+{
+	static const char *errStr[AMC_EP_ERR_BOUNDARY - AMC_EP_ERR_UNKNOWN + 1] = {
+		"unknown error",
+		"event callback not initialized",
+		"event key not initialized",
+		"event class methods not initialized",
+		"base timeout chain not initialized",
+		"event not found",
+		"event already exists",
+		"epoll event codes empty",
+		
+		"illegal AMCEpoll error"	// SHOULD placed in the end
+	};
+
+	if (0 == error) {
+		return "success";
+	}
+	if (-1 == error) {
+		return strerror(errno);
+	}
+
+	if (error < 0) {
+		error = -error;
+	}
+
+	if (error <= RB_ERR_BOUNDARY) {
+		return utilRbTree_StrError(error);
+	}
+	else if (error >= AMC_EP_ERR_BOUNDARY) {
+		return errStr[0];
+	}
+	else {
+		return errStr[error - AMC_EP_ERR_UNKNOWN];
+	}
+}
+
+
 /* --------------------AMCFd_MakeNonBlock----------------------- */
 int AMCFd_MakeNonBlock(int fd)
 {
@@ -536,12 +573,11 @@ int AMCFd_MakeNonBlock(int fd)
 		int flags = fcntl(fd, F_GETFL, NULL);
 		flags = fcntl(fd, F_SETFL, (flags | O_NONBLOCK));
 		if (0 == flags) {
-			return 0;
+			return ep_err(0);
 		}
 		else {
-			int err = errno;
-			ERROR("Failed to set O_NONBLOCK for fd %d: %s", fd, strerror(err));
-			return ep_err(err);
+			ERROR("Failed to set O_NONBLOCK for fd %d: %s", fd, strerror(errno));
+			return ep_err(errno);
 		}
 	}
 }
@@ -558,12 +594,11 @@ int AMCFd_MakeCloseOnExec(int fd)
 		int flags = fcntl(fd, F_GETFD, NULL);
 		flags = fcntl(fd, F_SETFD, (flags | FD_CLOEXEC));
 		if (0 == flags) {
-			return 0;
+			return ep_err(0);
 		}
 		else {
-			int err = errno;
-			ERROR("Failed to set FD_CLOEXEC for fd %d: %s", fd, strerror(err));
-			return ep_err(err);
+			ERROR("Failed to set FD_CLOEXEC for fd %d: %s", fd, strerror(errno));
+			return ep_err(errno);
 		}
 	}
 }
